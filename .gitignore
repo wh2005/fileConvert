@@ -1,0 +1,20 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/bin/Debug
+/.intellisense
+/.vs/fileConvert
+/data
+/obj
+/old
+/packages/Newtonsoft.Json.13.0.2
+/packages/Synergex.SynergyDE.Build.24.2.1065/build
+/packages/Synergex.SynergyDE.Build.24.2.1065/tools/dbl
+/packages/Synergex.SynergyDE.Build.24.2.1065
+/Repository/obj
+/rps/rpsmain.is1
+/rps/rpsmain.ism
+/rps/rpstext.is1
+/rps/rpstext.ism
+/fileConvert.synproj.user
