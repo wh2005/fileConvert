@@ -1,0 +1,118 @@
+﻿<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(SolutionDir)Common.props" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <Name>"fileConvert"</Name>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{7d997809-da5e-4e12-bd1c-99dfd0dfcb6d}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>fileConvert</RootNamespace>
+    <AssemblyName>fileConvert</AssemblyName>
+    <MainFile>Program.dbl</MainFile>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <TargetFrameworkProfile>
+    </TargetFrameworkProfile>
+    <DBL_qWarnLevel>3</DBL_qWarnLevel>
+    <DBL_qWarn>True</DBL_qWarn>
+    <DBLCmdOptions>-W3</DBLCmdOptions>
+    <Language>Synergy</Language>
+    <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
+    <EnableCommonProperties>True</EnableCommonProperties>
+    <CommonPropertiesFileLocation>$(SolutionDir)Common.props</CommonPropertiesFileLocation>
+    <StartupObject>(Not set)</StartupObject>
+    <WorkingDirectory>E:\DEV\fileConvert</WorkingDirectory>
+    <ResourceType>Icon</ResourceType>
+    <ApplicationIcon />
+    <NoWin32Manifest>False</NoWin32Manifest>
+    <ApplicationManifest />
+    <ResourceName />
+    <Install>True</Install>
+    <ApplicationRevision>0</ApplicationRevision>
+    <ApplicationVersion>1.0.0.*</ApplicationVersion>
+    <InstallFrom>Disk</InstallFrom>
+    <UpdateEnabled>False</UpdateEnabled>
+    <UpdateMode>Foreground</UpdateMode>
+    <UpdateInterval>7</UpdateInterval>
+    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
+    <UpdatePeriodically>False</UpdatePeriodically>
+    <UpdateRequired>False</UpdateRequired>
+    <MapFileExtensions>True</MapFileExtensions>
+    <IsWebBootstrapper>False</IsWebBootstrapper>
+    <UseApplicationTrust>False</UseApplicationTrust>
+    <BootstrapperEnabled>True</BootstrapperEnabled>
+    <RunPreBuildEvent>Always</RunPreBuildEvent>
+    <RunPostBuildEvent>On successful build</RunPostBuildEvent>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <Prefer32Bit Condition=" '$(TargetFrameworkVersion)'  != 'v4.0' AND '$(Prefer32Bit)' != 'false' ">true</Prefer32Bit>
+    <IncludeDebugInformation>true</IncludeDebugInformation>
+    <OutputPath>bin\Debug\</OutputPath>
+    <UnevaluatedOutputPath>bin\Debug\</UnevaluatedOutputPath>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+    <DebugOptimize>Debug</DebugOptimize>
+    <DocumentationFile>bin\Debug\fileConvert.xml</DocumentationFile>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <Prefer32Bit Condition=" '$(TargetFrameworkVersion)'  != 'v4.0' AND '$(Prefer32Bit)' != 'false' ">true</Prefer32Bit>
+    <IncludeDebugInformation>true</IncludeDebugInformation>
+    <OutputPath>bin\Release\</OutputPath>
+    <UnevaluatedOutputPath>bin\Release\</UnevaluatedOutputPath>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+    <DebugOptimize>Optimize</DebugOptimize>
+    <DocumentationFile>bin\Release\fileConvert.xml</DocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="Synergex.SynergyDE.ddlib, Version=4.0.0.10, Culture=neutral, PublicKeyToken=114c5dbb1312a8bc">
+      <HintPath>$(MSBuildProgramFiles32)\Common Files\Synergex\CLR40\Synergex.SynergyDE.ddlib.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="synrnt">
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="ismkey.dbl" />
+    <Compile Include="Properties\AssemblyInfo.dbl" />
+    <Compile Include="fileconvert.dbl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Properties" />
+  </ItemGroup>
+  <ItemGroup>
+    <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">
+      <Install>True</Install>
+      <ProductName>Microsoft .NET Framework 4.7.2 (x86 and x64)</ProductName>
+      <Visible>False</Visible>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
+      <Install>False</Install>
+      <ProductName>.NET Framework 3.5 SP1</ProductName>
+      <Visible>False</Visible>
+    </BootstrapperPackage>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RepositoryAPI\RepositoryAPI.synproj">
+      <Name>RepositoryAPI</Name>
+      <Project>{cd5c2eaa-951b-4530-a374-f8277a7bcc3a}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="Repository\Repository.synproj">
+      <Name>Repository</Name>
+      <Project>{61b30db5-3930-4c19-bc4b-1214435bd58d}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath)\Synergex\dbl\Synergex.SynergyDE.targets" />
+  <PropertyGroup>
+    <PreBuildEvent>
+    </PreBuildEvent>
+    <PostBuildEvent>
+    </PostBuildEvent>
+  </PropertyGroup>
+</Project>

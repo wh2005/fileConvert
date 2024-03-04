@@ -1,0 +1,955 @@
+import System
+import System.Collections.Generic
+import System.Linq
+
+import SynPSG
+import SynPSG.RepositoryAPI
+
+.define D_WANT_KEYS         ^x(0001)
+.define D_WANT_TAGS         ^x(0002)
+.define D_WANT_FORMATS      ^x(0004)
+.define D_WANT_RELATIONS    ^x(0008)
+.define D_WANT_EXPAND_ARRAYS ^x(0010)
+.define D_WANT_EXPAND_GROUPS ^x(0020)
+
+
+;************************************************************************
+; Convert a physical file using the Repository file definitions.
+;************************************************************************
+
+main
+
+.define D_APP_VERSION "fileConvert v0.1"
+
+.define MAX_ARGS    20
+
+    record
+        cmdlin      ,a1024
+        num_args    ,i4
+        argPos      ,[MAX_ARGS]i4
+        argLen      ,[MAX_ARGS]i4
+        argCtr      ,i4
+        loglen      ,i4
+        logical     ,a128
+    endrecord
+
+    record
+        src         ,ConvertData
+        dest        ,ConvertData
+        strng       ,String
+        mode        ,i4
+        interval    ,i4
+    endrecord
+
+proc
+
+    try
+    begin
+        init src, dest
+        clear mode, interval
+        
+        xcall cmdln(cmdlin, num_args, argPos, argLen)
+
+        if (%instr(1, cmdlin, ' -h ') || %instr(1, cmdlin, ' -? '))
+        begin
+            Console.WriteLine(D_APP_VERSION)
+            Console.WriteLine("")
+            Console.WriteLine("Usage:")
+            Console.WriteLine(" -i <inputRPSFile>          Source Repository file")
+            Console.WriteLine(" -o <outputRPSFile>         Output Repository file")
+            Console.WriteLine("[-ir <rpsmfil> <rpstfil>]   Source definition Repository")
+            Console.WriteLine("                              default to RPSMFIL: / RPSTFIL:")
+            Console.WriteLine("[-or <rpsmfil> <rpstfil>]   Output definition Repository")
+            Console.WriteLine("                              default to source definition repository")
+            Console.WriteLine("[-m [<mode>] ]              Program mode")
+            Console.WriteLine("                              mode 0 = convert file")
+            Console.WriteLine("                              mode 1 = create mapping report (default)")
+            Console.WriteLine("[-int <interval>]           Update UI interval")
+            Console.WriteLine("")
+            stop D_EXIT_SUCCESS
+        end
+
+        argCtr = 0
+
+        while(argCtr < num_args)
+        begin
+            argCtr += 1
+
+            using (cmdlin(argPos[argCtr]:argLen[argCtr])+' ') select
+            ('-i '),
+            begin
+                argCtr += 1
+                if (argCtr > MAX_ARGS || argPos[argCtr] < 1 || argLen[argCtr] < 1)
+                    throw new ApplicationException("Missing -i parameter ["+%atrim(cmdlin)+"]")
+                if (cmdlin(argPos[argCtr]:argLen[argCtr]) == '-')
+                    throw new ApplicationException("Missing -i parameter ["+%atrim(cmdlin)+"]")
+
+                strng = cmdlin(argPos[argCtr]:argLen[argCtr])
+                src.file = strng.ToUpper()
+            end
+
+            ('-ir '),
+            begin
+                argCtr += 1
+                if (argCtr > MAX_ARGS || argPos[argCtr] < 1 || argLen[argCtr] < 1)
+                    throw new ApplicationException("Missing -ir parameter 1 ["+%atrim(cmdlin)+"]")
+                if (cmdlin(argPos[argCtr]:argLen[argCtr]) == '-')
+                    throw new ApplicationException("Missing -ir parameter 1 ["+%atrim(cmdlin)+"]")
+
+                src.rpsm = cmdlin(argPos[argCtr]:argLen[argCtr])
+
+                argCtr += 1
+                if (argCtr > MAX_ARGS || argPos[argCtr] < 1 || argLen[argCtr] < 1)
+                    throw new ApplicationException("Missing -ir parameter 2 ["+%atrim(cmdlin)+"]")
+                if (cmdlin(argPos[argCtr]:argLen[argCtr]) == '-')
+                    throw new ApplicationException("Missing -ir parameter 2 ["+%atrim(cmdlin)+"]")
+
+                src.rpst = cmdlin(argPos[argCtr]:argLen[argCtr])
+            end
+
+            ('-o '),
+            begin
+                argCtr += 1
+                if (argCtr > MAX_ARGS || argPos[argCtr] < 1 || argLen[argCtr] < 1)
+                    throw new ApplicationException("Missing -o parameter ["+%atrim(cmdlin)+"]")
+                if (cmdlin(argPos[argCtr]:argLen[argCtr]) == '-')
+                    throw new ApplicationException("Missing -o parameter ["+%atrim(cmdlin)+"]")
+
+                strng = cmdlin(argPos[argCtr]:argLen[argCtr])
+                dest.file = strng.ToUpper()
+            end
+
+            ('-or '),
+            begin
+                argCtr += 1
+                if (argCtr > MAX_ARGS || argPos[argCtr] < 1 || argLen[argCtr] < 1)
+                    throw new ApplicationException("Missing -or parameter 1 ["+%atrim(cmdlin)+"]")
+                if (cmdlin(argPos[argCtr]:argLen[argCtr]) == '-')
+                    throw new ApplicationException("Missing -or parameter 1 ["+%atrim(cmdlin)+"]")
+            
+                dest.rpsm = cmdlin(argPos[argCtr]:argLen[argCtr])
+            
+                argCtr += 1
+                if (argCtr > MAX_ARGS || argPos[argCtr] < 1 || argLen[argCtr] < 1)
+                    throw new ApplicationException("Missing -or parameter 2 ["+%atrim(cmdlin)+"]")
+                if (cmdlin(argPos[argCtr]:argLen[argCtr]) == '-')
+                    throw new ApplicationException("Missing -or parameter 2 ["+%atrim(cmdlin)+"]")
+            
+                dest.rpst = cmdlin(argPos[argCtr]:argLen[argCtr])
+            end
+
+            ('-m '),
+            begin
+                mode = 1
+
+                if (argCtr+1 > MAX_ARGS || argPos[argCtr+1] < 1 || argLen[argCtr+1] < 1)
+                    exit
+                if (cmdlin(argPos[argCtr+1]:argLen[argCtr+1]) == '-')
+                    exit
+            
+                argCtr += 1
+                mode = cmdlin(argPos[argCtr]:argLen[argCtr])
+            end
+
+            ('-int '),
+            begin
+                argCtr += 1
+                if (argCtr > MAX_ARGS || argPos[argCtr] < 1 || argLen[argCtr] < 1)
+                    throw new ApplicationException("Missing -int parameter ["+%atrim(cmdlin)+"]")
+                if (cmdlin(argPos[argCtr]:argLen[argCtr]) == '-')
+                    throw new ApplicationException("Missing -int parameter ["+%atrim(cmdlin)+"]")
+
+                interval = cmdlin(argPos[argCtr]:argLen[argCtr])
+            end
+            endusing
+        end
+
+        if (String.IsNullOrWhitespace(src.file))
+            throw new ApplicationException("Input RPS file name not specified (-i) ["+%atrim(cmdlin)+"]")
+        if (String.IsNullOrWhitespace(dest.file))
+            throw new ApplicationException("Output RPS file name not specified (-o) ["+%atrim(cmdlin)+"]")
+
+        ;use default repository
+        if (String.IsNullOrWhitespace(src.rpsm) && String.IsNullOrWhitespace(src.rpst))
+        begin
+            xcall getlog('RPSMFIL',logical,loglen)
+            if (loglen)
+                src.rpsm = logical(1:loglen)
+            xcall getlog('RPSTFIL',logical,loglen)
+            if (loglen)
+                src.rpst = logical(1:loglen)
+        end
+
+        if (String.IsNullOrWhitespace(src.rpsm) || String.IsNullOrWhitespace(src.rpst))
+            throw new ApplicationException("Cannot determine input repository")
+
+        ;use input repository
+        if (String.IsNullOrWhitespace(dest.rpsm) && String.IsNullOrWhitespace(dest.rpst))
+        begin
+            dest.rpsm = src.rpsm
+            dest.rpst = src.rpst
+        end
+
+        if (String.IsNullOrWhitespace(dest.rpsm) || String.IsNullOrWhitespace(dest.rpst))
+            throw new ApplicationException("Cannot determine output repository")
+
+        if (src.rpsm == dest.rpsm && src.rpst == dest.rpst && src.file == dest.file)
+            throw new ApplicationException("Must specify different Repositories and/or RPS files")
+
+        using mode select
+        (0),
+            SynUtils.ConvertFile(src,dest,interval)
+        (1),
+            SynUtils.PrintDefinition(src,dest)
+        (),
+            throw new ApplicationException("Invalid option -m "+%string(mode))
+        endusing
+    end
+    catch (ex, @Exception)
+    begin
+        Console.WriteLine(D_APP_VERSION)
+        Console.WriteLine("")
+        Console.WriteLine(ex.Message)
+        stop D_EXIT_FAILURE
+    end
+    endtry
+
+    stop D_EXIT_SUCCESS
+
+endmain
+
+
+namespace SynPSG
+
+    structure ConvertData
+        rpsm            ,string             ;rpsmain file
+        rpst            ,string             ;rpstext file
+        file            ,string             ;file to convert
+    endstructure
+
+    structure data_rec
+        data            ,a65530
+        len             ,i4
+    endstructure
+
+
+    public static class SynUtils
+
+        public static method ConvertFile ,void
+            req in      fromData    ,ConvertData
+            req in      toData      ,ConvertData
+            opt in      interval    ,n
+            endparams
+
+            record
+                fChan               ,i4
+                tChan               ,i4
+                sts                 ,i4
+                numrecs             ,i4
+                currecn             ,i4
+                myInterval          ,i4
+                inrec               ,data_rec
+                outrec              ,data_rec
+            endrecord
+
+            record
+                fRpsFile ,@RpsFile 
+                tRpsFile ,@RpsFile
+            endrecord
+
+        proc
+
+            if (^passed(interval) && interval > 0) then
+                myInterval = interval
+            else
+                myInterval = 0
+
+            data frps = new Repository(fromData.rpsm, fromData.rpst)
+
+            frps.Config.WantKeys = true
+            frps.Config.WantTags = true
+            frps.Config.ExpandArrays = true
+            frps.Config.ExpandGroups = true
+
+            fRpsFile = frps.LoadFile(fromData.file)
+
+            data trps = new Repository(toData.rpsm, toData.rpst)
+
+            trps.Config = frps.Config
+
+            tRpsFile = trps.LoadFile(toData.file)
+
+            using fRpsFile.FileType select
+            ('DBL ISAM'),
+            begin
+                open(fChan, I:I, fRpsFile.FileSpec, OPTIONS:"/ex/sequential") [ERR=openError]
+                numrecs = %isinfo(fChan,'NUMRECS')
+            end
+            (),
+            begin
+                open(fChan, I, fRpsFile.FileSpec, OPTIONS:"/ex/sequential") [ERR=openError]
+                numrecs = 0
+            end
+            endusing
+
+            using tRpsFile.FileType select
+            ('DBL ISAM'),
+            begin
+                open(tChan, O, tRpsFile.FileSpec+'.tmp') [ERR=openError2]
+            end
+            (),
+            begin
+                open(tChan, O, tRpsFile.FileSpec) [ERR=openError2]
+            end
+            endusing
+
+            if(false)
+            begin
+openError,
+                throw new ApplicationException("Cannot open input file")
+openError2,
+                throw new ApplicationException("Cannot open output file")
+            end
+
+            currecn = 0
+            repeat
+            begin
+                reads(fChan,inrec.data) [EOF=done]
+                inrec.len = %rsize
+
+                currecn += 1
+
+                if (myInterval && (currecn == ((currecn/myInterval)*myInterval)))
+                begin
+                    if (numrecs) then
+                        Console.Writeline(%string(currecn)+" of "+%string(numrecs))
+                    else
+                        Console.Writeline(%string(currecn))
+                end
+
+                outrec = ConvertStructure(inrec, fRpsFile, tRpsFile)
+                
+                writes(tChan,outrec.data(1:outrec.len))
+            end
+done,
+            if (%rsize)
+            begin
+                inrec.len = %rsize
+
+                outrec = ConvertStructure(inrec, fRpsFile, tRpsFile)
+
+                writes(tChan,outrec)
+            end
+            close tChan
+            close fChan
+
+            Console.Writeline("output generated")
+
+            using tRpsFile.FileType select
+            ('DBL ISAM'),
+            begin
+                data filespec   ,a1024
+                data reclen     ,i4
+                data num_keys   ,i4
+                data key_spec   ,[8]a256
+                data log_file   ,a80
+                data mydcs      ,dcs
+
+                Console.Writeline("Getting key definitions")
+
+                mydcs = tRps.Info
+                data status ,i4 ,%ismkey(mydcs,, toData.file, filespec, reclen, num_keys, key_spec, log_file)
+                using status select
+                (0), ;ERR_NONE
+                begin
+                    Console.Writeline("creating updated isam file")
+
+                    ;create a new isam file
+                    xcall isamc(tRpsFile.FileSpec, reclen, num_keys, key_spec)
+
+                    Console.Writeline("loading isam file")
+                    xcall shell(,'fconvert -ii '+tRpsFile.FileSpec+'.tmp'+' -oi '+tRpsFile.FileSpec)
+
+                    xcall delet(tRpsFile.FileSpec+'.tmp')
+                    clear status
+                end
+                (),
+                begin
+                    throw new ApplicationException("ISMKEY Error " +%string(status))
+                end
+                endusing
+            end
+            endusing
+
+            if (frps != ^null)
+            begin
+                frps.Dispose()
+                frps = ^null
+            end
+
+            if (trps != ^null)
+            begin
+                trps.Dispose()
+                trps = ^null
+            end
+
+            mreturn
+        endmethod
+
+        private static method ConvertStructure   ,data_rec
+            aInRec                      ,data_rec
+            fRpsFile                    ,@RpsFile
+            tRpsFile                    ,@RpsFile
+            endparams
+
+            record
+                outRec                  ,data_rec
+            endrecord
+
+        proc
+
+            data srcStruct ,@RpsStructure
+            data destStruct ,@RpsStructure
+
+            if (DetermineStructures(aInRec, fRpsFile, tRpsFile, srcStruct, destStruct))
+                mreturn aInRec
+
+            if (srcStruct.Fields == ^null || srcStruct.Fields.Count == 0)
+                mreturn aInRec
+            if (destStruct.Fields == ^null || destStruct.Fields.Count == 0)
+                mreturn aInRec
+
+            data srcField ,@RpsField
+            data destField ,@RpsField
+
+            init outRec
+
+            outrec.len = destStruct.Length
+
+            foreach destField in destStruct.Fields
+            begin
+                ;find destField name in source structure
+                data fld_ctr ,i4 ,1
+                while (fld_ctr < srcStruct.Fields.Count)
+                begin
+                    srcField = srcStruct.Fields[fld_ctr-1]
+                    if (srcField.Name == destField.Name)
+                        exitloop
+                    fld_ctr += 1
+                    srcField = ^null
+                end
+
+                if (srcField == ^null) then
+                begin
+                    using destField.DataType select
+                    (RpsFieldDataType.Decimal),
+                        clear ^d(outRec.data(destField.StartPosition,destField.Size))
+                    (RpsFieldDataType.Integer, RpsFieldDataType.AutoSequence, RpsFieldDataType.AutoTime),
+                        clear ^i(outRec.data(destField.StartPosition,destField.Size))
+                    (RpsFieldDatatype.Boolean, RpsFieldDataType.Enum),
+                        clear ^i(outRec.data(destField.StartPosition,destField.Size))
+                    (), ;RpsFieldDataType.Alpha, RpsFieldDataType.User, RpsFieldDataType.Binary, RpsFieldDataType.Structfield
+                        nop
+                    endusing
+                end
+                else
+                begin                 
+                    using destField.DataType select
+                    (RpsFieldDataType.Decimal),
+                    begin
+                        data offset ,i4 ,destField.Size - srcField.Size
+                        if (offset >= 0) then
+                            outRec.data(destField.StartPosition+offset:destField.Size) = aInRec(srcField.StartPosition:srcField.Size)
+                        else
+                            outRec.data(destField.StartPosition,destField.Size) = aInRec(srcField.StartPosition+offset:srcField.Size)
+
+                        ;make sure decimal fields have zeros not spaces (in case they're part of a key)
+                        data posn ,i4
+                        for posn from destField.StartPosition thru destField.StartPosition+destField.Size-1
+                        begin
+                            if (outRec.data(posn:1) == ' ')
+                                outRec.data(posn:1) = '0'
+                        end
+                    end
+                    (),
+                        outRec.data(destField.StartPosition:destField.Size) = aInRec(srcField.StartPosition:srcField.Size)
+                    endusing
+                end
+            end
+
+            mreturn outRec
+        endmethod
+
+        private static method DetermineStructures ,int
+            req in  aInRec          ,data_rec
+            req in  fRpsFile        ,@RpsFile
+            req in  tRpsFile        ,@RpsFile
+            req out srcStruct       ,@RpsStructure
+            req out destStruct      ,@RpsStructure
+            endparams
+
+            record
+                isMatch                 ,i4
+            endrecord
+
+        proc
+
+            if (fRpsFile.Structures == ^null)
+                mreturn 1
+
+            if (tRpsFile.Structures == ^null)
+                mreturn 2
+
+            srcStruct = ^null
+            destStruct = ^null
+
+            data myStruct ,@RpsStructure
+            data myTag ,@RpsTag
+
+            isMatch = 0
+
+            foreach myStruct in fRpsFile.Structures
+            begin
+                if (myStruct.Tags == ^null) nextloop
+                if (myStruct.Fields == ^null) nextloop
+
+                data tag_ctr ,i4 ,1
+                while(tag_ctr < myStruct.Tags.Count)
+                begin
+                    myTag = myStruct.Tags[tag_ctr-1]
+                    using myStruct.TagType select
+                    (RpsTagType.None),
+                        isMatch = 1
+                    (RpsTagType.FieldAndValue),
+                    begin
+                        data tpos ,i4 ,0
+                        data tlen ,i4 ,0
+                        data fld_type ,a1 ,'A'
+
+                        data fld ,@RpsField
+
+                        foreach fld in myStruct.Fields
+                        begin
+                            if (fld.Name == myTag.Field)
+                            begin
+                                tpos = fld.StartPosition
+                                tlen = fld.Size
+                                using fld.DataType select
+                                (RpsFieldDataType.Decimal),
+                                    fld_type = 'D'
+                                (RpsFieldDataType.Integer, RpsFieldDataType.AutoSequence, RpsFieldDataType.AutoTime),
+                                    fld_type = 'I'
+                                (RpsFieldDatatype.Boolean, RpsFieldDataType.Enum),
+                                    fld_type = 'I'
+                                (), ;RpsFieldDataType.Alpha, RpsFieldDataType.User, RpsFieldDataType.Binary, RpsFieldDataType.Structfield
+                                    fld_type = 'A'
+                                endusing
+                            end
+                        end
+
+                        isMatch = 0
+
+                        if (tpos == 0 || tlen == 0) exit
+
+                        data field_value ,a30
+                        data tag_value ,a30
+
+                        ;normalize the data, so that an apples to apples comparison can occur
+                        field_value = NormalizeTagFieldData(fld_type, aInRec(tpos:tlen))
+                        tag_value = NormalizeTagFieldData(fld_type, myTag.ComparisonValue)
+
+                        using myTag.ComparisonOperator select
+                        (RpsTagOperator.OpEQ),
+                        begin
+                            isMatch = (field_value.eq.tag_value)
+                        end
+                        (RpsTagOperator.OpNE),
+                        begin
+                            isMatch = (field_value.ne.tag_value)
+                        end
+                        (RpsTagOperator.OpLE),
+                        begin
+                            isMatch = (field_value.le.tag_value)
+                        end
+                        (RpsTagOperator.OpLT),
+                        begin
+                            isMatch = (field_value.lt.tag_value)
+                        end
+                        (RpsTagOperator.OpGE),
+                        begin
+                            isMatch = (field_value.ge.tag_value)
+                        end
+                        (RpsTagOperator.OpGT),
+                        begin
+                            isMatch = (field_value.gt.tag_value)
+                        end
+                        (),
+                            clear isMatch
+                        endusing
+                    end
+                    (RpsTagType.RecordSize),
+                    begin
+                        using myTag.ComparisonOperator select
+                        (RpsTagOperator.OpEQ),
+                        begin
+                            isMatch = (aInRec.Len.eq.Convert.ToInt32(myTag.ComparisonValue))
+                        end
+                        (RpsTagOperator.OpNE),
+                        begin
+                            isMatch = (aInRec.Len.ne.Convert.ToInt32(myTag.ComparisonValue))
+                        end
+                        (RpsTagOperator.OpLE),
+                        begin
+                            isMatch = (aInRec.Len.le.Convert.ToInt32(myTag.ComparisonValue))
+                        end
+                        (RpsTagOperator.OpLT),
+                        begin
+                            isMatch = (aInRec.Len.lt.Convert.ToInt32(myTag.ComparisonValue))
+                        end
+                        (RpsTagOperator.OpGE),
+                        begin
+                            isMatch = (aInRec.Len.ge.Convert.ToInt32(myTag.ComparisonValue))
+                        end
+                        (RpsTagOperator.OpGT),
+                        begin
+                            isMatch = (aInRec.Len.gt.Convert.ToInt32(myTag.ComparisonValue))
+                        end
+                        endusing
+                    end
+                    endusing
+
+                    tag_ctr += 1
+
+                    using myTag.ComparisonConnector select
+                    (RpsTagComparison.CompareAnd),
+                    begin
+                        if(.not.isMatch)
+                        begin
+                            ;no match - try next condition by finding next OR tag
+                            while(tag_ctr < myStruct.Tags.Count && myTag.ComparisonConnector != RpsTagComparison.CompareOr)
+                            begin
+                                myTag = myStruct.Tags[tag_ctr-1]
+                                if (myTag.ComparisonConnector == RpsTagComparison.CompareOr)
+                                    tag_ctr += 1
+                            end
+                        end
+                    end
+                    (RpsTagComparison.CompareOr),
+                    begin
+                        if(isMatch)
+                            exitloop
+                    end
+                    (),
+                        exitloop
+                    endusing
+                end
+
+                if (isMatch)
+                begin
+                    srcStruct = myStruct
+                    exitloop
+                end
+            end
+
+            if (srcStruct == ^null)
+            begin
+                if (fRpsFile.Structures.Count == 0)
+                    mreturn 1
+                srcStruct = fRpsFile.Structures[0]
+            end
+
+            ;find structure in out RPS structures (by name)
+            foreach myStruct in tRpsFile.Structures
+            begin
+                if (myStruct.Name == srcStruct.Name)
+                begin
+                    destStruct = myStruct
+                    exitloop
+                end
+            end
+
+            if (destStruct == ^null)
+            begin
+                if (tRpsFile.Structures.Count == 0)
+                    mreturn 2
+                destStruct = tRpsFile.Structures[0]
+            end
+
+            mreturn 0
+        endmethod
+
+        private static method NormalizeTagFieldData   ,a30
+            req in      a_type          ,a
+            req in      a_old_value     ,a
+            endparams
+
+            record
+                decimal         ,d28.10
+                d18             ,d18 @decimal
+                value           ,a30
+            endrecord
+
+        proc
+            using a_type select
+            ('D'),
+            begin
+                decimal = ^d(%atrim(a_old_value))
+                value = decimal ,'XXXXXXXXXXXXXXXXX.XXXXXXXXXX-'
+            end
+            ('I'),
+            begin
+                d18 = ^argn(2)
+                value = d18 ,'XXXXXXXXXXXXXXXXX-'
+            end
+            (),
+            begin
+                value = a_old_value
+            end
+            endusing
+
+            mreturn value
+        endmethod
+
+        public static method PrintDefinition ,void
+            req in      fromData    ,ConvertData
+            req in      toData      ,ConvertData
+            endparams
+
+            record pline
+                sfld        ,a30
+                ,a1
+                sfldspec    ,a14
+                ,a1
+                sfldpos     ,a11
+                ,a8
+                ,a2
+                dfld        ,a30
+                ,a1
+                dfldspec    ,a14
+                ,a1
+                dfldpos     ,a11
+                ,a8
+            endrecord
+
+            record phed ,x
+                src         ,a65
+                ,a2
+                dest        ,a65
+            endrecord
+
+            record
+                chan        ,i4
+                srcEndPos   ,i4
+                destEndPos  ,i4
+                aryele      ,i4
+                pos1        ,i4
+                sts         ,i4
+                printedHdr  ,i4
+            endrecord
+
+        proc
+
+            data frps = new Repository(fromData.rpsm, fromData.rpst)
+
+            ;frps.Config.WantKeys = true
+            ;frps.Config.WantTags = true
+            frps.Config.ExpandArrays = true
+            frps.Config.ExpandGroups = true
+
+            data fRpsFile = frps.LoadFile(fromData.file)
+
+            data trps = new Repository(toData.rpsm, toData.rpst)
+
+            trps.Config = frps.Config
+
+            data tRpsFile = trps.LoadFile(toData.file)
+
+
+            open(chan=0,O,'log:'+fRpsFile.Name+'.log')
+
+            clear phed
+            phed.src = fRpsFile.Name+'  '+fRpsFile.Description
+            phed.dest = tRpsFile.Name+'  '+tRpsFile.Description
+            writes(chan,phed)
+
+            data srcStruct ,@RpsStructure
+            data destStruct ,@RpsStructure
+            data srcField ,@RpsField
+            data destField ,@RpsField
+
+            srcStruct = fRpsFile.Structures[0]
+            destStruct = tRpsFile.Structures[0]
+
+            foreach destField in destStruct.Fields
+            begin
+                ;find destField name in source structure
+                data fld_ctr ,i4 ,1
+                while (fld_ctr <= srcStruct.Fields.Count)
+                begin
+                    srcField = srcStruct.Fields[fld_ctr-1]
+                    if (srcField.Name == destField.Name)
+                        exitloop
+                    fld_ctr += 1
+                    srcField = ^null
+                end
+
+                if (srcField == ^null) then
+                    srcEndPos = 0
+                else
+                begin   
+                    if (frps.Config.ExpandArrays) then
+                        srcEndPos = srcField.StartPosition + srcField.Size - 1
+                    else
+                    begin   
+                        aryele = srcField.ArrayDimension[1]
+                        if (srcField.ArrayDimension[2])
+                        begin
+                            aryele *= srcField.ArrayDimension[2]
+                            if (srcField.ArrayDimension[3])
+                            begin
+                                aryele *= srcField.ArrayDimension[3]
+                                if (srcField.ArrayDimension[4])
+                                begin
+                                    aryele *= srcField.ArrayDimension[4]
+                                end
+                            end
+                        end
+                        if(aryele < 1) aryele = 1
+                        srcEndPos = srcField.StartPosition + (srcField.Size * aryele) - 1
+                    end
+                end
+
+                if (destField == ^null) then
+                    destEndPos = 0
+                else
+                begin
+                    if (trps.Config.ExpandArrays) then
+                        destEndPos = destField.StartPosition + destField.Size - 1
+                    else
+                    begin   
+                        aryele = destField.ArrayDimension[1]
+                        if (destField.ArrayDimension[2])
+                        begin
+                            aryele *= destField.ArrayDimension[2]
+                            if (destField.ArrayDimension[3])
+                            begin
+                                aryele *= destField.ArrayDimension[3]
+                                if (destField.ArrayDimension[4])
+                                begin
+                                    aryele *= destField.ArrayDimension[4]
+                                end
+                            end
+                        end
+                        if(aryele < 1) aryele = 1
+                        destEndPos = destField.StartPosition + (destField.Size * aryele) - 1
+                    end
+                end
+
+                clear pline
+                if (srcField != ^null)
+                begin
+                    sfld     = srcField.Name
+                    if (frps.Config.ExpandArrays) then
+                        sfldspec = srcField.DataTypeCode + %string(srcField.Size) 
+                    else
+                        sfldspec = RpsUtils.FormatArgs(srcField.ArrayDimension[1],srcField.ArrayDimension[2],srcField.ArrayDimension[3],srcField.ArrayDimension[4],1)
+                        &    + srcField.DataTypeCode + %string(srcField.Size) 
+                    sfldpos  = %string(srcField.StartPosition,'ZZZZX')+','+%string(srcEndPos,'ZZZZX')
+                end
+                if (destField != ^null)
+                begin
+                    dfld     = destField.Name
+                    if (frps.Config.ExpandArrays) then
+                        dfldspec = destField.DataTypeCode + %string(destField.Size) 
+                    else
+                        dfldspec = RpsUtils.FormatArgs(destField.ArrayDimension[1],destField.ArrayDimension[2],destField.ArrayDimension[3],destField.ArrayDimension[4],1)
+                        &    + destField.DataTypeCode + %string(destField.Size) 
+                    dfldpos  = %string(destField.StartPosition,'ZZZZX')+','+%string(destEndPos,'ZZZZX')
+                end
+                writes(chan,%atrim(pline))
+            end
+
+            writes(chan,"")
+
+            printedHdr = 0
+
+            foreach srcField in srcStruct.Fields
+            begin
+                ;find srcField name in destination structure
+                data fld_ctr ,i4 ,1
+                while (fld_ctr <= destStruct.Fields.Count)
+                begin
+                    destField = destStruct.Fields[fld_ctr-1]
+                    if (destField.Name == srcField.Name)
+                        exitloop
+                    fld_ctr += 1
+                    destField = ^null
+                end
+
+                if(destField != ^null)
+                    nextloop
+
+                if (srcField == ^null) then
+                    srcEndPos = 0
+                else
+                begin   
+                    if (frps.Config.ExpandArrays) then
+                        srcEndPos = srcField.StartPosition + srcField.Size - 1
+                    else
+                    begin   
+                        aryele = srcField.ArrayDimension[1]
+                        if (srcField.ArrayDimension[2])
+                        begin
+                            aryele *= srcField.ArrayDimension[2]
+                            if (srcField.ArrayDimension[3])
+                            begin
+                                aryele *= srcField.ArrayDimension[3]
+                                if (srcField.ArrayDimension[4])
+                                begin
+                                    aryele *= srcField.ArrayDimension[4]
+                                end
+                            end
+                        end
+                        if(aryele < 1) aryele = 1
+                        srcEndPos = srcField.StartPosition + (srcField.Size * aryele) - 1
+                    end
+                end
+
+                if (printedHdr == 0)
+                begin   
+                    writes(chan,"Fields that are not in destination structure")
+                    writes(chan,"")
+                    printedHdr = 1
+                end
+
+                clear pline
+                Sfld     = srcField.Name
+                if (frps.Config.ExpandArrays) then
+                    sfldspec = srcField.DataTypeCode + %string(srcField.Size) 
+                else
+                    sfldspec = RpsUtils.FormatArgs(srcField.ArrayDimension[1],srcField.ArrayDimension[2],srcField.ArrayDimension[3],srcField.ArrayDimension[4],1)
+                    &    + srcField.DataTypeCode + %string(srcField.Size) 
+                Sfldpos  = %string(srcField.StartPosition,'ZZZZX')+','+%string(srcEndPos,'ZZZZX')
+                writes(chan,%atrim(pline))
+            end
+
+            close chan
+
+            if (frps != ^null)
+            begin
+                frps.Dispose()
+                frps = ^null
+            end
+
+            if (trps != ^null)
+            begin
+                trps.Dispose()
+                trps = ^null
+            end
+
+            mreturn
+        endmethod
+
+    endclass
+
+endnamespace
