@@ -97,7 +97,7 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\RepositoryAPI\RepositoryAPI.synproj">
+    <ProjectReference Include="RepositoryAPI\RepositoryAPI.synproj">
       <Name>RepositoryAPI</Name>
       <Project>{cd5c2eaa-951b-4530-a374-f8277a7bcc3a}</Project>
       <Private>True</Private>

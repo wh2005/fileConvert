@@ -1,0 +1,1596 @@
+;;*****************************************************************************
+;;
+;; Title:       RpsField.dbl
+;;
+;; Type:        Class
+;;
+;; Description: Represents a single Repository field definition
+;;
+;; Date:        2nd March 2024
+;;
+;; Author:      Steve Ives, Synergex Professional Services Group
+;;              http://www.synergex.com
+;;
+;;*****************************************************************************
+;;
+;; Copyright (c) 2024, Synergex International, Inc.
+;; All rights reserved.
+;;
+;; Redistribution and use in source and binary forms, with or without
+;; modification, are permitted provided that the following conditions are met:
+;;
+;; * Redistributions of source code must retain the above copyright notice,
+;;   this list of conditions and the following disclaimer.
+;;
+;; * Redistributions in binary form must reproduce the above copyright notice,
+;;   this list of conditions and the following disclaimer in the documentation
+;;   and/or other materials provided with the distribution.
+;;
+;; THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+;; AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+;; IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+;; ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+;; LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+;; CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+;; SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+;; INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+;; CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+;; ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+;; POSSIBILITY OF SUCH DAMAGE.
+;;
+;;*****************************************************************************
+
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+import SynPSG.RepositoryAPI
+import Newtonsoft.Json
+import Newtonsoft.Json.Converters
+import System.Collections
+import System.Collections.Generic
+import System.ComponentModel
+
+namespace SynPSG.RepositoryAPI
+
+    ;;; <summary>
+    ;;; Represents a Repository field
+    ;;; </summary>
+    public class RpsField
+
+        public override method ToString, String
+            endparams
+        proc
+            mreturn String.Format("RpsField: {0}",this.Name)
+        endmethod
+
+        private mf_info, f_info
+
+        ;;; <summary>
+        ;;; Constructs a new field based on the name of a structure and a field.
+        ;;; </summary>
+        public method RpsField
+            endparams
+        proc
+        endmethod
+
+        ;;; <summary>
+        ;;; Constructs a new field by cloning an existing field.
+        ;;; </summary>
+        ;;; <param name="SourceField">Repository field to clone.</param>
+        public method RpsField
+            required in SourceField, @RpsField
+            endparams
+        proc
+            cloneField(SourceField)
+        endmethod
+
+        ;; Destructor
+        method ~RpsField
+        proc
+            clear this.AllowList, this.SelectionList, this.GroupFields
+        endmethod
+
+        private method cloneField, void
+            required in SourceField, @RpsField
+            endparams
+        proc
+            this.StructureName           = SourceField.StructureName
+            mf_info                      = SourceField.FieldData
+            this.Name                    = SourceField.Name
+            this.AlternateName           = SourceField.AlternateName
+            this.Description             = SourceField.Description
+            this.LongDescription         = SourceField.LongDescription
+            this.UserFieldType           = SourceField.UserFieldType
+            this.ReportHeading           = SourceField.ReportHeading
+            this.Prompt                  = SourceField.Prompt
+            this.HelpIdentifier          = SourceField.HelpIdentifier
+            this.InfoLineText            = SourceField.InfoLineText
+            this.UserText                = SourceField.UserText
+            this.FieldFont               = SourceField.FieldFont
+            this.PromptFont              = SourceField.PromptFont
+            this.DefaultValue            = SourceField.DefaultValue
+            this.ArriveMethod            = SourceField.ArriveMethod
+            this.LeaveMethod             = SourceField.LeaveMethod
+            this.DrillMethod             = SourceField.DrillMethod
+            this.HyperlinkMethod         = SourceField.HyperlinkMethod
+            this.ChangeMethod            = SourceField.ChangeMethod
+            this.DisplayMethod           = SourceField.DisplayMethod
+            this.EditFormatMethod        = SourceField.EditFormatMethod
+            this.NumericRangeMinimum     = SourceField.NumericRangeMinimum
+            this.NumericRangeMaximum     = SourceField.NumericRangeMaximum
+            this.EnumeratedDisplayLength = SourceField.EnumeratedDisplayLength
+            this.EnumeratedBaseValue     = SourceField.EnumeratedBaseValue
+            this.EnumeratedStepValue     = SourceField.EnumeratedStepValue
+            this.CoercedType             = SourceField.CoercedType
+            this.EnumName                = SourceField.EnumName
+            this.GroupStructure          = SourceField.GroupStructure
+            this.GroupMemberPrefix       = SourceField.GroupMemberPrefix
+
+            ;;Clone the array dimensions
+            this.ArrayDimension = new int[4]
+            this.ArrayDimension[1] = SourceField.ArrayDimension[1]
+            this.ArrayDimension[2] = SourceField.ArrayDimension[2]
+            this.ArrayDimension[3] = SourceField.ArrayDimension[3]
+            this.ArrayDimension[4] = SourceField.ArrayDimension[4]
+
+            ;;Clone the AllowList collection
+            begin
+                data item, @a
+                this.AllowList.Clear()
+                foreach item in SourceField.AllowList
+                    this.AllowList.Add(item)
+            end
+
+            ;;Clone the SelectionList collection
+            begin
+                data item, String
+                this.SelectionList.Clear()
+                foreach item in SourceField.SelectionList
+                    this.SelectionList.Add(item)
+            end
+
+            ;;Clone the GroupFields collection
+            begin
+                data fld, @RpsField
+                this.GroupFields.Clear()
+                foreach fld in SourceField.GroupFields
+                    this.GroupFields.Add(new RpsField(fld))
+            end
+
+        endmethod
+
+        ;;---------------------------------------------------------------------
+        ;;Public properties to expose field attributes
+        ;;
+        ;;IMPORTANT: If more properties are added, remember to update the cloneField method
+        ;;
+
+        ;;; <summary>
+        ;;; The name of the structure containing this field.
+        ;;; </summary>
+        public readwrite property StructureName, String, String.Empty
+
+        ;;; <summary>
+        ;;; The name of the field.
+        ;;; </summary>
+        public readwrite property Name, String, String.Empty
+
+        ;;; <summary>
+        ;;; The description of the field.
+        ;;; </summary>
+        public readwrite property Description, String, String.Empty
+        
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Data type.
+        ;;; </summary>
+        public property DataType, RpsFieldDataType
+            method get
+                record
+                    retval, RpsFieldDataType
+                endrecord
+            proc
+                using mf_info.fi_type select
+                ("A"),
+                    using mf_info.fi_class select
+                    (C_BINARY),
+                        retval = RpsFieldDataType.Binary
+                    (C_STRFLD),
+                        retval = RpsFieldDataType.StructField
+                    (),
+                        retval = RpsFieldDataType.Alpha
+                    endusing
+                ("D"),
+                    retval = RpsFieldDataType.Decimal
+                ("I"),
+                begin
+                    using mf_info.fi_class select
+                    (C_BOOLEAN),
+                        retval = RpsFieldDataType.Boolean
+                    (C_ENUM),
+                        retval = RpsFieldDataType.Enum
+                    (C_AUTOSEQ),
+                        retval = RpsFieldDataType.AutoSequence
+                    (C_AUTOTIME),
+                        retval = RpsFieldDataType.AutoTime
+                    (),
+                        retval = RpsFieldDataType.Integer
+                    endusing
+                end
+                ("U"),
+                    retval = RpsFieldDataType.User
+                endusing
+                mreturn retval
+            endmethod
+            method set
+            proc
+                using value select
+                (RpsFieldDataType.Alpha),
+                    mf_info.fi_type = "A"
+                (RpsFieldDataType.Decimal),
+                    mf_info.fi_type = "D"
+                (RpsFieldDataType.Integer),
+                    mf_info.fi_type = "I"
+                (RpsFieldDataType.User),
+                    mf_info.fi_type = "U"
+                (RpsFieldDataType.Boolean),
+                begin
+                    mf_info.fi_type = "I"
+                    mf_info.fi_class = C_BOOLEAN
+                    mf_info.fi_size = 1
+                end
+                (RpsFieldDataType.Enum),
+                begin
+                    mf_info.fi_type = "I"
+                    mf_info.fi_class = C_ENUM
+                    mf_info.fi_size = 4
+                end
+                (RpsFieldDataType.Binary),
+                begin
+                    mf_info.fi_type = "A"
+                    mf_info.fi_class = C_BINARY
+                end
+                (RpsFieldDataType.StructField),
+                begin
+                    mf_info.fi_type = "A"
+                    mf_info.fi_class = C_STRFLD
+                end
+                (RpsFieldDataType.AutoSequence),
+                begin
+                    mf_info.fi_type = "I"
+                    mf_info.fi_class = C_AUTOSEQ
+                    mf_info.fi_size = 8
+                end
+                (RpsFieldDataType.AutoTime),
+                begin
+                    mf_info.fi_type = "I"
+                    mf_info.fi_class = C_AUTOTIME
+                    mf_info.fi_size = 8
+                end
+                endusing
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; Data type code ("A", "D", "I" or "U").
+        ;;; </summary>
+        public property DataTypeCode, string
+            method get
+            proc
+                mreturn mf_info.fi_type
+            endmethod
+            method set
+            proc
+                using value select
+                ("A","D","I","U"),
+                    mf_info.fi_type = value
+                endusing
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Field size in bytes.
+        ;;; </summary>
+        public property Size, int
+            method get
+            proc
+                mreturn mf_info.fi_size
+            endmethod
+            method set
+            proc
+                mf_info.fi_size = value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; The precision of an impled decimal field.
+        ;;; </summary>
+        public property Precision, int
+            method get
+            proc
+                mreturn mf_info.fi_prec
+            endmethod
+            method set
+            proc
+                mf_info.fi_prec = value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; The array dimensions of an array field.
+        ;;; </summary>
+        public readwrite property ArrayDimension, [#]int
+
+        ;;; <summary>
+        ;;; The repository template that this field inherits attributes from.
+        ;;; </summary>
+        public property Template, String
+            method get
+            proc
+                mreturn %atrim(mf_info.fi_template)
+            endmethod
+            method set
+            proc
+                mf_info.fi_template = value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; The one-based sequence number of this field in the record.
+        ;;; </summary>
+        public property SequenceNumber, int
+            method get
+            proc
+                mreturn mf_info.fi_seqnm
+            endmethod
+            method set
+            proc
+                mf_info.fi_seqnm = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The one-based starting position of this field within the record.
+        ;;; </summary>
+        public property StartPosition, int
+            method get
+            proc
+                mreturn mf_info.fi_pos
+            endmethod
+            method set
+            proc
+                mf_info.fi_pos = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The name of the field which this field overlays.
+        ;;; </summary>
+        public property OverlaysField, String
+            method get
+            proc
+                mreturn %atrim(mf_info.fi_ovrfld)
+            endmethod
+            method set
+            proc
+                mf_info.fi_ovrfld = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The offset from the beginning of the field being overlayed.
+        ;;; </summary>
+        public property OverlayOffset, int
+            method get
+            proc
+                mreturn mf_info.fi_ovroff
+            endmethod
+            method set
+            proc
+                mf_info.fi_ovroff = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; The data subclass of the field.
+        ;;; </summary>
+        public property DataTypeSubclass, RpsFieldSubclass
+            method get
+                record
+                    retval, RpsFieldSubclass
+                endrecord
+            proc
+                retval = RpsFieldSubclass.None
+                using mf_info.fi_type select
+                (T_ALP),
+                    using mf_info.fi_class select
+                    (C_BINARY),
+                        retval = RpsFieldSubclass.None
+                    endusing
+                (T_DEC),
+                begin
+                    using mf_info.fi_class select
+                    (C_YYMMDD),
+                        retval = RpsFieldSubclass.DateYYMMDD
+                    (C_YYYYMMDD),
+                        retval = RpsFieldSubclass.DateYYYYMMDD
+                    (C_YYJJJ),
+                        retval = RpsFieldSubclass.DateYYJJJ
+                    (C_YYYYJJJ),
+                        retval = RpsFieldSubclass.DateYYYYJJJ
+                    (C_YYPP),
+                        retval = RpsFieldSubclass.DateYYPP
+                    (C_YYYYPP),
+                        retval = RpsFieldSubclass.DateYYYYPP
+                    (C_HHMMSS),
+                        retval = RpsFieldSubclass.TimeHHMMSS
+                    (C_HHMM),
+                        retval = RpsFieldSubclass.TimeHHMM
+                    endusing
+                end
+                (T_USR),
+                begin
+                    using mf_info.fi_class select
+                    (C_ALPHA),
+                        retval = RpsFieldSubclass.UserAlpha
+                    (C_NUMERIC),
+                        retval = RpsFieldSubclass.UserNumeric
+                    (C_DATE),
+                        retval = RpsFieldSubclass.UserDate
+                    endusing
+                end
+                endusing
+                mreturn retval
+            endmethod
+            method set
+            proc
+                using value select
+                (RpsFieldSubclass.DateYYMMDD),
+                begin
+                    mf_info.fi_type = T_DEC
+                    mf_info.fi_class = C_YYMMDD
+                end
+                (RpsFieldSubclass.DateYYYYMMDD),
+                begin
+                    mf_info.fi_type = T_DEC
+                    mf_info.fi_class = C_YYYYMMDD
+                end
+                (RpsFieldSubclass.DateYYJJJ),
+                begin
+                    mf_info.fi_type = T_DEC
+                    mf_info.fi_class = C_YYJJJ
+                end
+                (RpsFieldSubclass.DateYYYYJJJ),
+                begin
+                    mf_info.fi_type = T_DEC
+                    mf_info.fi_class = C_YYYYJJJ
+                end
+                (RpsFieldSubclass.DateYYPP),
+                begin
+                    mf_info.fi_type = T_DEC
+                    mf_info.fi_class = C_YYPP
+                end
+                (RpsFieldSubclass.DateYYYYPP),
+                begin
+                    mf_info.fi_type = T_DEC
+                    mf_info.fi_class = C_YYYYPP
+                end
+                (RpsFieldSubclass.TimeHHMMSS),
+                begin
+                    mf_info.fi_type = T_DEC
+                    mf_info.fi_class = C_HHMMSS
+                end
+                (RpsFieldSubclass.TimeHHMM),
+                begin
+                    mf_info.fi_type = T_DEC
+                    mf_info.fi_class = C_HHMM
+                end
+                (RpsFieldSubclass.Binary),
+                begin
+                    mf_info.fi_type = T_ALP
+                    mf_info.fi_class = C_BINARY
+                end
+                (RpsFieldSubclass.UserAlpha),
+                begin
+                    mf_info.fi_type = T_USR
+                    mf_info.fi_class = C_ALPHA
+                end
+                (RpsFieldSubclass.UserNumeric),
+                begin
+                    mf_info.fi_type = T_USR
+                    mf_info.fi_class = C_NUMERIC
+                end
+                (RpsFieldSubclass.UserDate),
+                begin
+                    mf_info.fi_type = T_USR
+                    mf_info.fi_class = C_DATE
+                end
+                endusing
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The user defined type of a user defined field.
+        ;;; </summary>
+        public readwrite property UserFieldType, String, String.Empty
+
+        ;;; <summary>
+        ;;; The native size of the field.
+        ;;; </summary>
+        public property NativeSize, int
+            method get
+            proc
+                mreturn mf_info.fi_ndsize
+            endmethod
+            method set
+            proc
+                mf_info.fi_ndsize = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The name of the repository enumeration referenced by an enum field. 
+        ;;; This refers to a Synergy language enumeration, not a UI Toolkit enumeration.
+        ;;; </summary>
+        public readwrite property EnumName, String, String.Empty
+        
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; The coreced data type of the field.
+        ;;; </summary>
+        public readwrite property CoercedType, RpsFieldCoercedType, RpsFieldCoercedType.CtNone
+        
+        ;;; <summary>
+        ;;; The name of the structure that defines the type of this struct field.
+        ;;; </summary>
+        public readwrite property StructFieldStructure, String, String.Empty
+
+        ;;; <summary>
+        ;;; Indicates whether or not the field is a group.
+        ;;; See the GroupType property to determine the type of group.
+        ;;; </summary>
+        public property IsGroup, boolean
+            method get
+            proc
+                mreturn (mf_info.fi_group!=0)
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; Indicates the type of group referred to by the field (implicit or explicit).
+        ;;; </summary>
+        public property GroupType, RpsFieldGroup
+            method get
+            proc
+                mreturn (RpsFieldGroup)integer(mf_info.fi_group)
+            endmethod
+            method set
+            proc
+                mf_info.fi_group = (int)value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; The collection of fields within this group field.
+        ;;; If this field is not a group this collection will be empty.
+        ;;; </summary>
+        public readwrite property GroupFields, @RpsFieldCollection, new RpsFieldCollection()
+        
+        ;;; <summary>
+        ;;; The structure that defines the fields for an implicit group field.
+        ;;; Only used for implicit groups (i.e. groups based on a different repository structure).
+        ;;; </summary>
+        public readwrite property GroupStructure, string, String.Empty
+        
+        ;;; <summary>
+        ;;; The prefix to be applied to members of the group field.
+        ;;; </summary>
+        public readwrite property GroupMemberPrefix, String, String.Empty
+        
+        ;;; <summary>
+        ;;; Is the size of the group field equal to the sum of the sizes of all members of the group?
+        ;;; </summary>
+        public property GroupSizeEqualsMembers, boolean
+            method get
+            proc
+                mreturn mf_info.fi_nosize
+            endmethod
+            method set
+            proc
+                mf_info.fi_nosize = value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; Does the compiler use the group member prefix?
+        ;;; </summary>
+        public property CompilerUsesGroupMemberPrefix, boolean
+            method get
+            proc
+                mreturn mf_info.fi_cmppref
+            endmethod
+            method set
+            proc
+                mf_info.fi_cmppref = value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; Is the current field excluded by the compiler?
+        ;;; </summary>
+        public property ExcludedByLanguage, boolean
+            method get
+            proc
+                mreturn mf_info.fi_dblvw
+            endmethod
+            method set
+            proc
+                mf_info.fi_dblvw = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Is the current field invisible to the ReportWriter product?
+        ;;; </summary>
+        public property ExcludedByReportWriter, boolean
+            method get
+            proc
+                mreturn mf_info.fi_rptvw
+            endmethod
+            method set
+            proc
+                mf_info.fi_rptvw = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Is the current field invisible to the UI Toolkit product?
+        ;;; </summary>
+        public property ExcludedByToolkit, boolean
+            method get
+            proc
+                mreturn mf_info.fi_scrptvw
+            endmethod
+            method set
+            proc
+                mf_info.fi_scrptvw = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Is the current field invisible to the Web products?
+        ;;; </summary>
+        public property ExcludedByWeb, boolean
+            method get
+            proc
+                mreturn mf_info.fi_webvw
+            endmethod
+            method set
+            proc
+                mf_info.fi_webvw = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Should the current field be excluded from 'link by name' processing?
+        ;;; </summary>
+        public property NoNameLink, boolean
+            method get
+            proc
+                mreturn mf_info.fi_nolnk
+            endmethod
+            method set
+            proc
+                mf_info.fi_nolnk = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The repository name of the fields display format, if any.
+        ;;; </summary>
+        public property FormatName, String
+            method get
+            proc
+                mreturn %atrim(mf_info.fi_fmt)
+            endmethod
+            method set
+            proc
+                mf_info.fi_fmt = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The fields display format string, if any.
+        ;;; </summary>
+        public readwrite property FormatString, String, String.Empty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Input field justification.
+        ;;; </summary>
+        public property InputJustification, RpsJustification
+            method get
+            proc
+                mreturn (RpsJustification)integer(mf_info.fi_inpjust)
+            endmethod
+            method set
+            proc
+                mf_info.fi_inpjust = (int)value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Field positioning mode (None, Absolute or Relative).
+        ;;; </summary>
+        public property FieldPositionMode, RpsPositionMode
+            method get
+            proc
+                mreturn (RpsPositionMode)integer(mf_info.fi_fpostyp)
+            endmethod
+            method set
+            proc
+                mf_info.fi_fpostyp = (int)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Screen row for input.
+        ;;; </summary>
+        public property FieldRow, int
+            method get
+            proc
+                mreturn mf_info.fi_finprow
+            endmethod
+            method set
+            proc
+                mf_info.fi_finprow = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Screen column for input.
+        ;;; </summary>
+        public property FieldColumn, int
+            method get
+            proc
+                mreturn mf_info.fi_finpcol
+            endmethod
+            method set
+            proc
+                mf_info.fi_finpcol = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; For numeric fields, display blank instead of zero.
+        ;;; </summary>
+        public property BlankIfZero, boolean
+            method get
+            proc
+                mreturn mf_info.fi_bzro
+            endmethod
+            method set
+            proc
+                mf_info.fi_bzro = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Is the field a paint field?
+        ;;; </summary>
+        public property PaintField, boolean
+            method get
+            proc
+                mreturn mf_info.fi_paint
+            endmethod
+            method set
+            proc
+                mf_info.fi_paint = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Does the field have a custom paint character specified?
+        ;;; See also PaintCharacter.
+        ;;; </summary>
+        public property PaintCharacterSpecified, boolean
+            method get
+            proc
+                mreturn mf_info.fi_pntchr != " "
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The fields custom paint character, if any.
+        ;;; See also PaintCharacterSpecified.
+        ;;; </summary>
+        public property PaintCharacter, string
+            method get
+            proc
+                mreturn mf_info.fi_pntchr ? mf_info.fi_pntchr : "*"
+            endmethod
+            method set
+            proc
+                mf_info.fi_pntchr = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; How the field should be viewed (Field, RadioButton or Checkbox).
+        ;;; </summary>
+        public property ViewAs, RpsFieldViewAs
+            method get
+            proc
+                mreturn (RpsFieldViewAs)integer(mf_info.fi_view)
+            endmethod
+            method set
+            proc
+                mf_info.fi_view = (int)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Is the field read-only?
+        ;;; </summary>
+        public property ReadOnly, boolean
+            method get
+            proc
+                mreturn mf_info.fi_readonly
+            endmethod
+            method set
+            proc
+                mf_info.fi_readonly = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Is the field disabled?
+        ;;; </summary>
+        public property Disabled, boolean
+            method get
+            proc
+                mreturn mf_info.fi_disabled
+            endmethod
+            method set
+            proc
+                mf_info.fi_disabled = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The display length of the field.
+        ;;; </summary>
+        public property DisplayLength, int
+            method get
+            proc
+                mreturn mf_info.fi_displen
+            endmethod
+            method set
+            proc
+                mf_info.fi_displen = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The view length of the field.
+        ;;; </summary>
+        public property ViewLength, int
+            method get
+            proc
+                mreturn mf_info.fi_viewlen
+            endmethod
+            method set
+            proc
+                mf_info.fi_viewlen = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The help identifier associated with the field.
+        ;;; </summary>
+        public readwrite property HelpIdentifier, String, String.Empty
+        
+        ;;; <summary>
+        ;;; Text to be displayed in the information line when the field is being processed.
+        ;;; </summary>
+        public readwrite property InfoLineText, String, String.Empty
+        
+        ;;; <summary>
+        ;;; The fields "user-defined" text.
+        ;;; </summary>
+        public readwrite property UserText, String, String.Empty
+        
+        ;;; <summary>
+        ;;; The fields long description.
+        ;;; </summary>
+        public readwrite property LongDescription, String, String.Empty
+        
+        ;;; <summary>
+        ;;; The alternate name (ODBC name) of the field.
+        ;;; </summary>
+        public readwrite property AlternateName, String, String.Empty
+        
+        ;;; <summary>
+        ;;; The name of the font palette used to display the field.
+        ;;; </summary>
+        public readwrite property FieldFont, String, String.Empty
+        
+        ;;; <summary>
+        ;;; The prompt associated with the field.
+        ;;; </summary>
+        public readwrite property Prompt, String, String.Empty
+        
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; The positioning mode of the prompt (None, Absolute or Relative).
+        ;;; </summary>
+        public property PromptPositionMode, RpsPositionMode
+            method get
+            proc
+                mreturn (RpsPositionMode)integer(mf_info.fi_postyp)
+            endmethod
+            method set
+            proc
+                mf_info.fi_postyp = (int)value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; Screen row where the prompt should be displayed.
+        ;;; </summary>
+        public property PromptRow, int
+            method get
+            proc
+                mreturn mf_info.fi_inprow
+            endmethod
+            method set
+            proc
+                mf_info.fi_inprow = value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; Screen column where the prompt should be displayed.
+        ;;; </summary>
+        public property PromptColumn, int
+            method get
+            proc
+                mreturn mf_info.fi_inpcol
+            endmethod
+            method set
+            proc
+                mf_info.fi_inpcol = value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; The font palette that should be used to display the prompt.
+        ;;; </summary>
+        public readwrite property PromptFont, String, String.Empty
+        
+        ;;; <summary>
+        ;;; The heading for the field when displayed in a report.
+        ;;; </summary>
+        public readwrite property ReportHeading, String, String.Empty
+        
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; The field justification (Left, Right or Center).
+        ;;; </summary>
+        public property ReportJustification, RpsJustification
+            method get
+            proc
+                mreturn (RpsJustification)integer(mf_info.fi_rptjust)
+            endmethod
+            method set
+            proc
+                mf_info.fi_rptjust = (int)value
+            endmethod
+        endproperty
+        
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; The color palete that should be used to display the field (Palette1 thru Palette16).
+        ;;; </summary>
+        public property ColorPalette, RpsColorPalette
+            method get
+            proc
+                mreturn (RpsColorPalette)integer(mf_info.fi_color)
+            endmethod
+            method set
+            proc
+                mf_info.fi_color = (int)value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; Should the field be highlighted (bolded)?
+        ;;; </summary>
+        public property RenditionHighlight, boolean
+            method get
+            proc
+                mreturn (mf_info.fi_attrib&&mf_info.fi_highlight)
+            endmethod
+            method set
+            proc
+                mf_info.fi_highlight = value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; Should the field be displayed in "reverse video"?
+        ;;; </summary>
+        public property RenditionReverse, boolean
+            method get
+            proc
+                mreturn (mf_info.fi_attrib&&mf_info.fi_reverse)
+            endmethod
+            method set
+            proc
+                mf_info.fi_reverse = value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; Should the field be displayed using a "blinking" font?
+        ;;; </summary>
+        public property RenditionBlink, boolean
+            method get
+            proc
+                mreturn (mf_info.fi_attrib&&mf_info.fi_blink)
+            endmethod
+            method set
+            proc
+                mf_info.fi_blink = value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; Should the field be displayed underlined?
+        ;;; </summary>
+        public property RenditionUnderline, boolean
+            method get
+            proc
+                mreturn (mf_info.fi_attrib&&mf_info.fi_underline)
+            endmethod
+            method set
+            proc
+                mf_info.fi_underline = value
+            endmethod
+        endproperty
+        
+        ;;; <summary>
+        ;;; Should "echo" be s uppressed as the user types (password fields)?
+        ;;; See also NoEchoCharacter.
+        ;;; </summary>
+        public property NoEcho, boolean
+            method get
+            proc
+                mreturn mf_info.fi_noecho
+            endmethod
+            method set
+            proc
+                mf_info.fi_noecho = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; If echo is suppressed as the user types, whet character should be displayed instead of the characters typed?
+        ;;; See also NoEcho.
+        ;;; </summary>
+        public property NoEchoCharacter, String
+            method get
+            proc
+                mreturn mf_info.fi_echochr
+            endmethod
+            method set
+            proc
+                mf_info.fi_echochr = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; The default action assocuated with the field (None, Default, Copy, Increment or Decrement).
+        ;;; See also DefaultAuotmatic.
+        ;;; </summary>
+        public property DefaultAction, RpsFieldDefaultAction
+            method get
+            proc
+                mreturn (RpsFieldDefaultAction)integer(mf_info.fi_defact)
+            endmethod
+            method set
+            proc
+                mf_info.fi_defact = (int)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Should the fields default action be applied automatically?
+        ;;; See also DefaultAction.
+        ;;; </summary>
+        public property DefaultAuotmatic, boolean
+            method get
+            proc
+                mreturn mf_info.fi_auto
+            endmethod
+            method set
+            proc
+                mf_info.fi_auto = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Should date fields default to the current day?
+        ;;; </summary>
+        public property DateDefaultToday, boolean
+            method get
+            proc
+                mreturn mf_info.fi_today
+            endmethod
+            method set
+            proc
+                mf_info.fi_today = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Should date fields be displayed in a shortened format?
+        ;;; </summary>
+        public property AllowShortDate, boolean
+            method get
+            proc
+                mreturn mf_info.fi_short
+            endmethod
+            method set
+            proc
+                mf_info.fi_short = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Should time fields default to the current time?
+        ;;; </summary>
+        public property TimeDefaultNow, boolean
+            method get
+            proc
+                mreturn mf_info.fi_now
+            endmethod
+            method set
+            proc
+                mf_info.fi_now = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Should time fields be displayed with an AM/PM indicator?
+        ;;; </summary>
+        public property TimeAmPm, boolean
+            method get
+            proc
+                mreturn mf_info.fi_ampm
+            endmethod
+            method set
+            proc
+                mf_info.fi_ampm = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Should a timeout peried be used when processing the field?
+        ;;; </summary>
+        public property InputTimeoutMode, RpsFieldTimeout
+            method get
+            proc
+                mreturn (RpsFieldTimeout)integer(mf_info.fi_wait)
+            endmethod
+            method set
+            proc
+                mf_info.fi_wait = (int)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; What timeout peried should be used when processing the field?
+        ;;; </summary>
+        public property InputTimeout, int
+            method get
+            proc
+                mreturn mf_info.fi_waittime
+            endmethod
+            method set
+            proc
+                mf_info.fi_waittime = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Should input to an alpha field be converted to uppercase?
+        ;;; </summary>
+        public property Uppercase, boolean
+            method get
+            proc
+                mreturn mf_info.fi_uc
+            endmethod
+            method set
+            proc
+                mf_info.fi_uc = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Should entry to implied decimal fields not require the entry of a decimal point?
+        ;;; </summary>
+        public property NoDecimalRequired, boolean
+            method get
+            proc
+                mreturn mf_info.fi_nodec
+            endmethod
+            method set
+            proc
+                mf_info.fi_nodec = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Should the field terminate automatically when full?
+        ;;; </summary>
+        public property NoTerminatorRequired, boolean
+            method get
+            proc
+                mreturn mf_info.fi_noterm
+            endmethod
+            method set
+            proc
+                mf_info.fi_noterm = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Should the position of the cursor within the field be retained between
+        ;;; different times when the field is being processed?
+        ;;; </summary>
+        public property RetainPosition, boolean
+            method get
+            proc
+                mreturn mf_info.fi_retpos
+            endmethod
+            method set
+            proc
+                mf_info.fi_retpos = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The input length of the field.
+        ;;; </summary>
+        public property InputLength, int
+            method get
+            proc
+                mreturn mf_info.fi_inplen
+            endmethod
+            method set
+            proc
+                mf_info.fi_inplen = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Does the field require a value in order to be valid?
+        ;;; </summary>
+        public property Required, boolean
+            method get
+            proc
+                mreturn mf_info.fi_req
+            endmethod
+            method set
+            proc
+                mf_info.fi_req = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Is the field a "break" field (None, Change, Always or OnReturn)?
+        ;;; </summary>
+        public property BreakMode, RpsFieldBreak
+            method get
+            proc
+                mreturn (RpsFieldBreak)integer(mf_info.fi_break)
+            endmethod
+            method set
+            proc
+                mf_info.fi_break = (int)value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Are negative values allowed in numeric fields (None, Allowed, Only or OrZero)?
+        ;;; </summary>
+        public property NegativeAllowed, RpsFieldNegatives
+            method get
+            proc
+                mreturn (RpsFieldNegatives)integer(mf_info.fi_negalw)
+            endmethod
+            method set
+            proc
+                mf_info.fi_negalw = (int)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; A list of values that are allowed in the field.
+        ;;; An empty collection if all values are allowed.
+        ;;; See also AllowListMatchCase, AllowListMatchExact and AllowListMaxLength.
+        ;;; </summary>
+        public readwrite property AllowList, @ArrayList, new ArrayList()
+
+        ;;; <summary>
+        ;;; If the content of the field is restricted to certain values,
+        ;;; what is the maximum length of those allowed values.
+        ;;; See also AllowList.
+        ;;; </summary>
+        public property AllowListMaxLength, int
+            method get
+            proc
+                mreturn mf_info.fi_alwlen
+            endmethod
+            method set
+            proc
+                mf_info.fi_alwlen = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; If the content of the field is restricted to specific allowed values,
+        ;;; should the comparison to that list be case sensitive?
+        ;;; See also AllowList.
+        ;;; </summary>
+        public property AllowListMatchCase, boolean
+            method get
+            proc
+                mreturn mf_info.fi_matchcs
+            endmethod
+            method set
+            proc
+                mf_info.fi_matchcs = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; If the content of the field is restricted to specific allowed values,
+        ;;; should the comparison to that list be for an exact match?
+        ;;; See also AllowList.
+        ;;; </summary>
+        public property AllowListMatchExact, boolean
+            method get
+            proc
+                mreturn mf_info.fi_matchex
+            endmethod
+            method set
+            proc
+                mf_info.fi_matchex = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; A collection of valid selections to be displayed as a drop-doen list or
+        ;;; collection of radio buttons.
+        ;;; </summary>
+        public readwrite property SelectionList, @List<String>, new List<String>()
+
+        ;;; <summary>
+        ;;; If a collection of valid selections is provided, what is the maximum length
+        ;;; of those selections?
+        ;;; </summary>
+        public property SelectionListMaxLength, int
+            method get
+            proc
+                mreturn mf_info.fi_sellen
+            endmethod
+            method set
+            proc
+                mf_info.fi_sellen = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Type of selection list (Window or List).
+        ;;; </summary>
+        public property SelectionListType, RpsFieldSelectionType
+            method get
+            proc
+                mreturn (RpsFieldSelectionType)integer(mf_info.fi_seltyp)
+            endmethod
+            method set
+            proc
+                mf_info.fi_seltyp = (int)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Screen row for the display of a selection window.
+        ;;; </summary>
+        public property SelectionWindowRow, int
+            method get
+            proc
+                mreturn mf_info.fi_selrow
+            endmethod
+            method set
+            proc
+                mf_info.fi_selrow = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Screen column for the display of a selection window.
+        ;;; </summary>
+        public property SelectionWindowColumn, int
+            method get
+            proc
+                mreturn mf_info.fi_selcol
+            endmethod
+            method set
+            proc
+                mf_info.fi_selcol = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The name of the selection window associated with the field.
+        ;;; Only used if SelectionListType is RpsFieldSelectionType.Window
+        ;;; </summary>
+        public property SelectionWindowName, String
+            method get
+            proc
+                mreturn %atrim(mf_info.fi_selwin)
+            endmethod
+            method set
+            proc
+                mf_info.fi_selwin = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The height of the selection window associated with the field.
+        ;;; Only used if SelectionListType is RpsFieldSelectionType.List
+        ;;; </summary>
+        public property SelectionWindowHeight, int
+            method get
+            proc
+                mreturn mf_info.fi_selht
+            endmethod
+            method set
+            proc
+                mf_info.fi_selht = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The default value for the field.
+        ;;; </summary>
+        public readwrite property DefaultValue, String, String.Empty
+
+        ;;; <summary>
+        ;;; The name of the arrive method associated with the field.
+        ;;; </summary>
+        public readwrite property ArriveMethod, String, String.Empty
+
+        ;;; <summary>
+        ;;; The name of the leave method associated with the field.
+        ;;; </summary>
+        public readwrite property LeaveMethod, String, String.Empty
+
+        ;;; <summary>
+        ;;; The name of the drill method associated with the field.
+        ;;; </summary>
+        public readwrite property DrillMethod, String, String.Empty
+
+        ;;; <summary>
+        ;;; The name of the hyperlink method associated with the field.
+        ;;; </summary>
+        public readwrite property HyperlinkMethod, String, String.Empty
+
+        ;;; <summary>
+        ;;; The name of the change method associated with the field.
+        ;;; </summary>
+        public readwrite property ChangeMethod, String, String.Empty
+
+        ;;; <summary>
+        ;;; The name of the display method associated with the field.
+        ;;; </summary>
+        public readwrite property DisplayMethod, String, String.Empty
+
+        ;;; <summary>
+        ;;; The name of the edit format method associated with the field.
+        ;;; </summary>
+        public readwrite property EditFormatMethod, String, String.Empty
+
+        ;;; <summary>
+        ;;; Does a range of allowed values exist for a numeric field.
+        ;;; See also NumericRangeMinimum and NumericRangeMaximum.
+        ;;; </summary>
+        public property NumericRangeExists, boolean
+            method get
+            proc
+                mreturn mf_info.fi_range
+            endmethod
+            method set
+            proc
+                mf_info.fi_range = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The minimum value allowed in a numeric field.
+        ;;; See also NumericRangeExists.
+        ;;; </summary>
+        public readwrite property NumericRangeMinimum, decimal, 0.0
+
+        ;;; <summary>
+        ;;; The maximum value allowed in a numeric field.
+        ;;; See also NumericRangeExists.
+        ;;; </summary>
+        public readwrite property NumericRangeMaximum, decimal, 0.0
+
+        ;;; <summary>
+        ;;; The the field "enumerated"? i.e. are selections translated into numeric values?
+        ;;; See also EnumeratedDisplayLength, EnumeratedBaseValue and EnumeratedStepValue
+        ;;; </summary>
+        public property Enumerated, boolean
+            method get
+            proc
+                mreturn (mf_info.fi_enum!=0)
+            endmethod
+            method set
+            proc
+                mf_info.fi_enum = (value>0)
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The maximum length of an emumerated fields selections.
+        ;;; See also Enumerated.
+        ;;; </summary>
+        public readwrite property EnumeratedDisplayLength, int, 0
+
+        ;;; <summary>
+        ;;; The value of an enumerated fields first selection.
+        ;;; See also Enumerated.
+        ;;; </summary>
+        public readwrite property EnumeratedBaseValue, int, 0
+
+        ;;; <summary>
+        ;;; An enumerated fields step value.
+        ;;; the base value is incremented by this value for each selection.
+        ;;; See also Enumerated.
+        ;;; </summary>
+        public readwrite property EnumeratedStepValue, int, 0
+
+        public property Info, f_info
+            method set
+            proc
+                mf_info = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Only intended for use when cloning fields.
+        ;;; </summary>
+        public property FieldData, string
+            method get
+            proc
+                mreturn (string)mf_info
+            endmethod
+        endproperty
+
+    endclass
+
+endnamespace

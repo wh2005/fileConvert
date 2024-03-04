@@ -1,0 +1,155 @@
+;;*****************************************************************************
+;;
+;; Title:       RpsTag.dbl
+;;
+;; Type:        Class
+;;
+;; Description: Represents a single tag definition for a Repository structure
+;;
+;; Date:        2nd March 2024
+;;
+;; Author:      Steve Ives, Synergex Professional Services Group
+;;              http://www.synergex.com
+;;
+;;*****************************************************************************
+;;
+;; Copyright (c) 2024, Synergex International, Inc.
+;; All rights reserved.
+;;
+;; Redistribution and use in source and binary forms, with or without
+;; modification, are permitted provided that the following conditions are met:
+;;
+;; * Redistributions of source code must retain the above copyright notice,
+;;   this list of conditions and the following disclaimer.
+;;
+;; * Redistributions in binary form must reproduce the above copyright notice,
+;;   this list of conditions and the following disclaimer in the documentation
+;;   and/or other materials provided with the distribution.
+;;
+;; THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+;; AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+;; IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+;; ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+;; LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+;; CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+;; SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+;; INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+;; CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+;; ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+;; POSSIBILITY OF SUCH DAMAGE.
+;;
+;;*****************************************************************************
+
+import SynPSG.RepositoryAPI
+import Newtonsoft.Json
+import Newtonsoft.Json.Converters
+
+namespace SynPSG.RepositoryAPI
+
+    ;;; <summary>
+    ;;; Represents a repository TAG definition
+    ;;; </summary>
+    public class RpsTag
+
+        public override method ToString, String
+            endparams
+        proc
+            mreturn String.Format("RpsTag: {0}",mTagName)
+        endmethod
+
+        ;;Tag attribute data
+        private mtg_info  ,tg_info
+        private mTagName  ,String
+
+        ;;; <summary>
+        ;;; Load a tag
+        ;;; </summary>
+        ;;; <param name="StructureName">Structure name</param>
+        ;;; <param name="TagName">Tag name</param>
+        public method RpsTag
+            endparams
+        proc
+        endmethod
+
+        ;;---------------------------------------------------------------------
+        ;;Public properties to expose tag data to the outside world
+
+        ;;; <summary>
+        ;;; Tag name
+        ;;; </summary>
+        public property Name, String
+            method set
+            proc
+                mTagName = value
+            endmethod
+            method get
+            proc
+                mreturn mTagName
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Sequence number
+        ;;; </summary>
+        public property SequenceNumber, int
+            method get
+            proc
+                mreturn mtg_info.tgi_seqnm
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Tag field comparison connector
+        ;;; </summary>
+        public property ComparisonConnector, RpsTagComparison
+            method get
+            proc
+                if (mtg_info.tgi_seqnm==1) then
+                    mreturn RpsTagComparison.None
+                else
+                    mreturn (RpsTagComparison)integer(mtg_info.tgi_tagcon)
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Field name
+        ;;; </summary>
+        public property Field, String
+            method get
+            proc
+                mreturn %atrim(mtg_info.tgi_tagfld)
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Tag field comparison operator
+        ;;; </summary>
+        public property ComparisonOperator, RpsTagOperator
+            method get
+            proc
+                mreturn (RpsTagOperator)integer(mtg_info.tgi_tagcmp)
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Tag field comparison value
+        ;;; </summary>
+        public property ComparisonValue, String
+            method get
+            proc
+                mreturn %atrim(mtg_info.tgi_tagval)
+            endmethod
+        endproperty
+
+        public property Info, tg_info
+            method set
+            proc
+                mtg_info = value
+            endmethod
+        endproperty
+
+    endclass
+
+endnamespace

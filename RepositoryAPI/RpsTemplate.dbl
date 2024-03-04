@@ -1,0 +1,1511 @@
+;;*****************************************************************************
+;;
+;; Title:       RpsTemplate.dbl
+;;
+;; Type:        Class
+;;
+;; Description: Represents a single Repository template definition
+;;
+;; Date:        2nd March 2024
+;;
+;; Author:      Steve Ives, Synergex Professional Services Group
+;;              http://www.synergex.com
+;;
+;;*****************************************************************************
+;;
+;; Copyright (c) 2024, Synergex International, Inc.
+;; All rights reserved.
+;;
+;; Redistribution and use in source and binary forms, with or without
+;; modification, are permitted provided that the following conditions are met:
+;;
+;; * Redistributions of source code must retain the above copyright notice,
+;;   this list of conditions and the following disclaimer.
+;;
+;; * Redistributions in binary form must reproduce the above copyright notice,
+;;   this list of conditions and the following disclaimer in the documentation
+;;   and/or other materials provided with the distribution.
+;;
+;; THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+;; AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+;; IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+;; ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+;; LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+;; CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+;; SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+;; INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+;; CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+;; ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+;; POSSIBILITY OF SUCH DAMAGE.
+;;
+;;*****************************************************************************
+
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+import SynPSG.RepositoryAPI
+import System.Collections
+import Newtonsoft.Json
+import Newtonsoft.Json.Converters
+import System.ComponentModel
+
+namespace SynPSG.RepositoryAPI
+
+    ;;; <summary>
+    ;;; Represents a repository TEMPLATE definition
+    ;;; </summary>
+    public class RpsTemplate
+
+        public override method ToString, String
+            endparams
+        proc
+            mreturn String.Format("RpsTemplate: {0}",mTemplateName)
+        endmethod
+
+        ;;Template attribute data
+        private mt_info               ,t_info
+        private mTemplateName         ,a30
+        private mDescription          ,a40
+        private mLongDescription      ,a1800
+        private mUserFieldType        ,a30
+        private mReportHeading        ,a40
+        private mPrompt               ,a80
+        private mHelpIdentifier       ,a80
+        private mInfoLineText         ,a80
+        private mUserText             ,a80
+        private mAlternateName        ,a30
+        private mFieldFont            ,a30
+        private mPromptFont           ,a30
+        private mDefaultValue         ,a80
+        private mArriveMethod         ,a30
+        private mLeaveMethod          ,a30
+        private mDrillMethod          ,a30
+        private mHyperlinkMethod      ,a30
+        private mChangeMethod         ,a30
+        private mDisplayMethod        ,a30
+        private mEditFormatMethod     ,a30
+        private mArrayDimension       ,[#]int
+        private mfti_range            ,fti_range
+        private mfti_enum             ,fti_enum
+        private mAllowList            ,@ArrayList
+        private mSelectionList        ,@ArrayList
+        private mCoercedType          ,RpsFieldCoercedType
+
+        ;;; <summary>
+        ;;; Load a template
+        ;;; </summary>
+        ;;; <param name="aTemplateName">Template name</param>
+        public method RpsTemplate
+        proc
+            mArrayDimension = new int[4]
+        endmethod
+
+        ;; Destructor
+        method ~RpsTemplate
+        proc
+            clear mAllowList, mSelectionList
+        endmethod
+
+        ;;---------------------------------------------------------------------
+        ;;Public properties to expose template attributes
+
+        ;;; <summary>
+        ;;; The one-based number of the template within the collection of templates
+        ;;; </summary>
+        public readwrite property TemplateNumber, int
+
+        ;;; <summary>
+        ;;; Template name
+        ;;; </summary>
+        public property Name, string
+            method get
+            proc
+                mreturn %atrim(mTemplateName)
+            endmethod
+            method set
+            proc
+                mTemplateName = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Parent template name
+        ;;; </summary>
+        public property ParentTemplate, string
+            method get
+            proc
+                mreturn %atrim(mt_info.ti_template)
+            endmethod
+            method set
+            proc
+                mt_info.ti_template = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Description
+        ;;; </summary>
+        public property Description, string
+            method get
+            proc
+                mreturn %atrim(mDescription)
+            endmethod
+            method set
+            proc
+                mDescription = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Long description
+        ;;; </summary>
+        public property LongDescription, string
+            method get
+            proc
+                mreturn %atrim(mLongDescription)
+            endmethod
+            method set
+            proc
+                mLongDescription = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Data type
+        ;;; </summary>
+        public property DataType, RpsFieldDataType
+            method get
+                record
+                    retval, RpsFieldDataType
+                endrecord
+            proc
+                using mt_info.ti_type select
+                ("A"), retval = RpsFieldDataType.Alpha
+                ("D"), retval = RpsFieldDataType.Decimal
+                ("I"), retval = RpsFieldDataType.Integer
+                ("U"), retval = RpsFieldDataType.User
+                endusing
+                mreturn retval
+            endmethod
+            method set
+            proc
+                using value select
+                (RpsFieldDataType.Alpha),
+                    mt_info.ti_type = 'A'
+                (RpsFieldDataType.Decimal),
+                    mt_info.ti_type = 'D'
+                (RpsFieldDataType.Integer),
+                    mt_info.ti_type = 'I'
+                (RpsFieldDataType.User),
+                    mt_info.ti_type = 'U'
+                endusing
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Data type code
+        ;;; </summary>
+        public property DataTypeCode, string
+            method get
+            proc
+                mreturn mt_info.ti_type
+            endmethod
+            method set
+            proc
+                mt_info.ti_type = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; DBL type subclass
+        ;;; </summary>
+        public property DataTypeSubclass, RpsFieldSubclass
+            method get
+                record
+                    tmp_SubClass, RpsFieldSubclass
+                endrecord
+            proc
+                tmp_SubClass = RpsFieldSubclass.None
+                using mt_info.ti_type select
+                (T_ALP),
+                    using mt_info.ti_class select
+                    (C_BINARY),
+                        tmp_SubClass = RpsFieldSubclass.None
+                    endusing
+                (T_DEC),
+                begin
+                    using mt_info.ti_class select
+                    (C_YYMMDD),
+                        tmp_SubClass = RpsFieldSubclass.DateYYMMDD
+                    (C_YYYYMMDD),
+                        tmp_SubClass = RpsFieldSubclass.DateYYYYMMDD
+                    (C_YYJJJ),
+                        tmp_SubClass = RpsFieldSubclass.DateYYJJJ
+                    (C_YYYYJJJ),
+                        tmp_SubClass = RpsFieldSubclass.DateYYYYJJJ
+                    (C_YYPP),
+                        tmp_SubClass = RpsFieldSubclass.DateYYPP
+                    (C_YYYYPP),
+                        tmp_SubClass = RpsFieldSubclass.DateYYYYPP
+                    (C_HHMMSS),
+                        tmp_SubClass = RpsFieldSubclass.TimeHHMMSS
+                    (C_BINARY),
+                        tmp_SubClass = RpsFieldSubclass.TimeHHMM
+                    endusing
+                end
+                (T_USR),
+                begin
+                    using mt_info.ti_class select
+                    (C_ALPHA),
+                        tmp_SubClass = RpsFieldSubclass.UserAlpha
+                    (C_NUMERIC),
+                        tmp_SubClass = RpsFieldSubclass.UserNumeric
+                    (C_DATE),
+                        tmp_SubClass = RpsFieldSubclass.UserDate
+                    endusing
+                end
+                endusing
+                mreturn tmp_SubClass
+            endmethod
+            ;method set
+            ;proc
+            ;     = value
+            ;endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; User defined field type
+        ;;; </summary>
+        public property UserFieldType, string
+            method get
+            proc
+                mreturn %atrim(mUserFieldType)
+            endmethod
+            method set
+            proc
+                mUserFieldType = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Field size
+        ;;; </summary>
+        public property Size, int
+            method get
+            proc
+                mreturn mt_info.ti_size
+            endmethod
+            method set
+            proc
+                mt_info.ti_size = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Digits to right of decimal point
+        ;;; </summary>
+        public property Precision, int
+            method get
+            proc
+                mreturn mt_info.ti_prec
+            endmethod
+            method set
+            proc
+                mt_info.ti_prec = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Array dimensions
+        ;;; </summary>
+        public property ArrayDimension, [#]int
+            method get
+            proc
+                mreturn mArrayDimension
+            endmethod
+            method set
+            proc
+                mArrayDimension = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Native data size
+        ;;; </summary>
+        public property NativeSize, int
+            method get
+            proc
+                mreturn mt_info.ti_ndsize
+            endmethod
+            method set
+            proc
+                mt_info.ti_ndsize = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; The name of the repository enumeration referenced by an enum field. 
+        ;;; This refers to a Synergy language enumeration, not a UI Toolkit enumeration.
+        ;;; </summary>
+        public readwrite property EnumName, String, String.Empty
+
+        ;;; <summary>
+        ;;; Excluded by language
+        ;;; </summary>
+        public property ExcludedByLanguage, boolean
+            method get
+            proc
+                mreturn mt_info.ti_dblvw
+            endmethod
+            method set
+            proc
+                mt_info.ti_dblvw = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Excluded by ReportWriter
+        ;;; </summary>
+        public property ExcludedByReportWriter, boolean
+            method get
+            proc
+                mreturn mt_info.ti_rptvw
+            endmethod
+            method set
+            proc
+                mt_info.ti_rptvw = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Excluded by Toolkit
+        ;;; </summary>
+        public property ExcludedByToolkit, boolean
+            method get
+            proc
+                mreturn mt_info.ti_scrptvw
+            endmethod
+            method set
+            proc
+                mt_info.ti_scrptvw = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Excluded by Web
+        ;;; </summary>
+        public property ExcludedByWeb, boolean
+            method get
+            proc
+                mreturn mt_info.ti_webvw
+            endmethod
+            method set
+            proc
+                mt_info.ti_webvw = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Field name is the name link
+        ;;; </summary>
+        public property NoNameLink, boolean
+            method get
+            proc
+                mreturn mt_info.ti_nolnk
+            endmethod
+            method set
+            proc
+                mt_info.ti_nolnk = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Report heading
+        ;;; </summary>
+        public property ReportHeading, string
+            method get
+            proc
+                mreturn %atrim(mReportHeading)
+            endmethod
+            method set
+            proc
+                mReportHeading = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Display format name
+        ;;; </summary>
+        public property FormatName, string
+            method get
+            proc
+                mreturn %atrim(mt_info.ti_fmt)
+            endmethod
+            method set
+            proc
+                mt_info.ti_fmt = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Report field justification
+        ;;; </summary>
+        public property ReportJustification, RpsJustification
+            method get
+            proc
+                mreturn (RpsJustification)integer(mt_info.ti_rptjust)
+            endmethod
+            method set
+            proc
+                mt_info.ti_rptjust = (i)value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Input field justification
+        ;;; </summary>
+        public property InputJustification, RpsJustification
+            method get
+            proc
+                mreturn (RpsJustification)integer(mt_info.ti_inpjust)
+            endmethod
+            method set
+            proc
+                mt_info.ti_inpjust = (i)value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Input field position mode
+        ;;; </summary>
+        public property FieldPositionMode, RpsPositionMode
+            method get
+            proc
+                mreturn (RpsPositionMode)integer(mt_info.ti_fpostyp)
+            endmethod
+            method set
+            proc
+                mt_info.ti_fpostyp = (i)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Input field row
+        ;;; </summary>
+        public property FieldRow, int
+            method get
+            proc
+                mreturn mt_info.ti_finprow
+            endmethod
+            method set
+            proc
+                mt_info.ti_finprow = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Input field column
+        ;;; </summary>
+        public property FieldColumn, int
+            method get
+            proc
+                mreturn mt_info.ti_finpcol
+            endmethod
+            method set
+            proc
+                mt_info.ti_finpcol = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Prompt position type
+        ;;; </summary>
+        public property PromptPositionMode, RpsPositionMode
+            method get
+            proc
+                mreturn (RpsPositionMode)integer(mt_info.ti_postyp)
+            endmethod
+            method set
+            proc
+                mt_info.ti_postyp = (i)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Prompt row
+        ;;; </summary>
+        public property PromptRow, int
+            method get
+            proc
+                mreturn mt_info.ti_inprow
+            endmethod
+            method set
+            proc
+                mt_info.ti_inprow = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Prompt column
+        ;;; </summary>
+        public property PromptColumn, int
+            method get
+            proc
+                mreturn mt_info.ti_inpcol
+            endmethod
+            method set
+            proc
+                mt_info.ti_inpcol = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Blank if zero
+        ;;; </summary>
+        public property BlankIfZero, boolean
+            method get
+            proc
+                mreturn mt_info.ti_bzro
+            endmethod
+            method set
+            proc
+                mt_info.ti_bzro = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Custom paint character specified
+        ;;; </summary>
+        public property PaintCharacterSpecified, boolean
+            method get
+            proc
+                mreturn mt_info.ti_paint
+            endmethod
+            method set
+            proc
+                mt_info.ti_paint = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Custom paint character
+        ;;; </summary>
+        public property PaintCharacter, string
+            method get
+            proc
+                mreturn mt_info.ti_pntchr
+            endmethod
+            method set
+            proc
+                mt_info.ti_pntchr = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; View field as
+        ;;; </summary>
+        public property ViewAs, RpsFieldViewAs
+            method get
+            proc
+                mreturn (RpsFieldViewAs)integer(mt_info.ti_view)
+            endmethod
+            method set
+            proc
+                mt_info.ti_view = (i)value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Color palette
+        ;;; </summary>
+        public property ColorPalette, RpsColorPalette
+            method get
+            proc
+                mreturn (RpsColorPalette)integer(mt_info.ti_color)
+            endmethod
+            method set
+            proc
+                mt_info.ti_color = (i)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Override the highlight attribute
+        ;;; </summary>
+        public property RenditionHighlight, boolean
+            method get
+            proc
+                mreturn (mt_info.ti_attrib && mt_info.ti_highlight)
+            endmethod
+            method set
+            proc
+                mt_info.ti_highlight = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Override the reverse attribute
+        ;;; </summary>
+        public property RenditionReverse, boolean
+            method get
+            proc
+                mreturn (mt_info.ti_attrib && mt_info.ti_reverse)
+            endmethod
+            method set
+            proc
+                mt_info.ti_reverse = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Override the blink attribute
+        ;;; </summary>
+        public property RenditionBlink, boolean
+            method get
+            proc
+                mreturn (mt_info.ti_attrib && mt_info.ti_blink)
+            endmethod
+            method set
+            proc
+                mt_info.ti_blink = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Override the underline attribute
+        ;;; </summary>
+        public property RenditionUnderline, boolean
+            method get
+            proc
+                mreturn (mt_info.ti_attrib && mt_info.ti_underline)
+            endmethod
+            method set
+            proc
+                mt_info.ti_underline = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Read-only
+        ;;; </summary>
+        public property ReadOnly, boolean
+            method get
+            proc
+                mreturn mt_info.ti_readonly
+            endmethod
+            method set
+            proc
+                mt_info.ti_readonly = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Disabled
+        ;;; </summary>
+        public property Disabled, boolean
+            method get
+            proc
+                mreturn mt_info.ti_disabled
+            endmethod
+            method set
+            proc
+                mt_info.ti_disabled = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Display length
+        ;;; </summary>
+        public property DisplayLength, int
+            method get
+            proc
+                mreturn mt_info.ti_displen
+            endmethod
+            method set
+            proc
+                mt_info.ti_displen = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; View length
+        ;;; </summary>
+        public property ViewLength, int
+            method get
+            proc
+                mreturn mt_info.ti_viewlen
+            endmethod
+            method set
+            proc
+                mt_info.ti_viewlen = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Don't echo characters typed
+        ;;; </summary>
+        public property NoEcho, boolean
+            method get
+            proc
+                mreturn mt_info.ti_noecho
+            endmethod
+            method set
+            proc
+                mt_info.ti_noecho = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Echo character for characters typed
+        ;;; </summary>
+        public property NoEchoCharacter, string
+            method get
+            proc
+                mreturn mt_info.ti_echochr
+            endmethod
+            method set
+            proc
+                mt_info.ti_echochr = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Default action
+        ;;; </summary>
+        public property DefaultAction, RpsFieldDefaultAction
+            method get
+            proc
+                mreturn (RpsFieldDefaultAction)integer(mt_info.ti_defact)
+            endmethod
+            method set
+            proc
+                mt_info.ti_defact = (i)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Automatic default action?
+        ;;; </summary>
+        public property DefaultAuotmatic, boolean
+            method get
+            proc
+                mreturn mt_info.ti_auto
+            endmethod
+            method set
+            proc
+                mt_info.ti_auto = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Default date to current date?
+        ;;; </summary>
+        public property DateDefaultToday, boolean
+            method get
+            proc
+                mreturn mt_info.ti_today
+            endmethod
+            method set
+            proc
+                mt_info.ti_today = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Allow short date?
+        ;;; </summary>
+        public property AllowShortDate, boolean
+            method get
+            proc
+                mreturn mt_info.ti_short
+            endmethod
+            method set
+            proc
+                mt_info.ti_short = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Default time to current time?
+        ;;; </summary>
+        public property TimeDefaultNow, boolean
+            method get
+            proc
+                mreturn mt_info.ti_now
+            endmethod
+            method set
+            proc
+                 mt_info.ti_now = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Display meridian indicator?
+        ;;; </summary>
+        public property TimeAmPm, boolean
+            method get
+            proc
+                mreturn mt_info.ti_ampm
+            endmethod
+            method set
+            proc
+                mt_info.ti_ampm = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Input timeout mode
+        ;;; </summary>
+        public property InputTimeoutMode, RpsFieldTimeout
+            method get
+            proc
+                mreturn (RpsFieldTimeout)integer(mt_info.ti_wait)
+            endmethod
+            method set
+            proc
+                mt_info.ti_wait = (i)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Input timeout delay. Only used if InputTimeoutMode = RpsFieldTimeout.Time
+        ;;; </summary>
+        public property InputTimeout, int
+            method get
+            proc
+                mreturn mt_info.ti_waittime
+            endmethod
+            method set
+            proc
+                mt_info.ti_waittime = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Convert input to uppercase?
+        ;;; </summary>
+        public property Uppercase, boolean
+            method get
+            proc
+                mreturn mt_info.ti_uc
+            endmethod
+            method set
+            proc
+                 mt_info.ti_uc = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; No decimal needs to be entered
+        ;;; </summary>
+        public property NoDecimalRequired, boolean
+            method get
+            proc
+                mreturn mt_info.ti_nodec
+            endmethod
+            method set
+            proc
+                mt_info.ti_nodec = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Field terminates automatically when filled
+        ;;; </summary>
+        public property NoTerminatorRequired, boolean
+            method get
+            proc
+                mreturn mt_info.ti_noterm
+            endmethod
+            method set
+            proc
+                mt_info.ti_noterm = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Cursor position is retained
+        ;;; </summary>
+        public property RetainPosition, boolean
+            method get
+            proc
+                mreturn mt_info.ti_retpos
+            endmethod
+            method set
+            proc
+                mt_info.ti_retpos = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Input length
+        ;;; </summary>
+        public property InputLength, int
+            method get
+            proc
+                mreturn mt_info.ti_inplen
+            endmethod
+            method set
+            proc
+                mt_info.ti_inplen = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Required field
+        ;;; </summary>
+        public property Required, boolean
+            method get
+            proc
+                mreturn mt_info.ti_req
+            endmethod
+            method set
+            proc
+                mt_info.ti_req = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Break field?
+        ;;; </summary>
+        public property BreakMode, RpsFieldBreak
+            method get
+            proc
+                mreturn (RpsFieldBreak)integer(mt_info.ti_break)
+            endmethod
+            method set
+            proc
+                mt_info.ti_break = (i)value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Negative allowed
+        ;;; </summary>
+        public property NegativeAllowed, RpsFieldNegatives
+            method get
+            proc
+                mreturn (RpsFieldNegatives)integer(mt_info.ti_negalw)
+            endmethod
+            method set
+            proc
+                mt_info.ti_negalw = (i)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Allowed values list
+        ;;; </summary>
+        public property AllowList, @ArrayList
+            method get
+            proc
+                mreturn mAllowList
+            endmethod
+            method set
+            proc
+                mAllowList = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Length of longest allow list entry
+        ;;; </summary>
+        public property AllowListMaxLength, int
+            method get
+            proc
+                mreturn mt_info.ti_alwlen
+            endmethod
+            method set
+            proc
+                mt_info.ti_alwlen = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Case sensitive matches for allow list values
+        ;;; </summary>
+        public property AllowListMatchCase, boolean
+            method get
+            proc
+                mreturn mt_info.ti_matchcs
+            endmethod
+            method set
+            proc
+                mt_info.ti_matchcs = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Exact matches for allow list values
+        ;;; </summary>
+        public property AllowListMatchExact, boolean
+            method get
+            proc
+                mreturn mt_info.ti_matchex
+            endmethod
+            method set
+            proc
+                mt_info.ti_matchex = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Selection List
+        ;;; </summary>
+        public property SelectionList, @ArrayList
+            method get
+            proc
+                mreturn mSelectionList
+            endmethod
+            method set
+            proc
+                mSelectionList = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Length of longest selection list entry
+        ;;; </summary>
+        public property SelectionListMaxLength, int
+            method get
+            proc
+                mreturn mt_info.ti_sellen
+            endmethod
+            method set
+            proc
+                mt_info.ti_sellen = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Current selection type
+        ;;; </summary>
+        public property SelectionListType, RpsFieldSelectionType
+            method get
+            proc
+                mreturn (RpsFieldSelectionType)integer(mt_info.ti_seltyp)
+            endmethod
+            method set
+            proc
+                mt_info.ti_seltyp = (i)value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Selection window row
+        ;;; </summary>
+        public property SelectionWindowRow, int
+            method get
+            proc
+                mreturn mt_info.ti_selrow
+            endmethod
+            method set
+            proc
+                mt_info.ti_selrow = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Selection window column
+        ;;; </summary>
+        public property SelectionWindowColumn, int
+            method get
+            proc
+                mreturn mt_info.ti_selcol
+            endmethod
+            method set
+            proc
+                mt_info.ti_selcol = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Selection window name. Only used if SelectionListType = RpsFieldSelectionType.Window.
+        ;;; </summary>
+        public property SelectionWindowName, string
+            method get
+            proc
+                mreturn %atrim(mt_info.ti_selwin)
+            endmethod
+            method set
+            proc
+                mt_info.ti_selwin = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Selection window height. Only used if SelectionListType = RpsFieldSelectionType.List
+        ;;; </summary>
+        public property SelectionWindowHeight, int
+            method get
+            proc
+                mreturn mt_info.ti_selht
+            endmethod
+            method set
+            proc
+                mt_info.ti_selht = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Field prompt
+        ;;; </summary>
+        public property Prompt, string
+            method get
+            proc
+                mreturn %atrim(mPrompt)
+            endmethod
+            method set
+            proc
+                mPrompt = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Help identifier
+        ;;; </summary>
+        public property HelpIdentifier, string
+            method get
+            proc
+                mreturn %atrim(mHelpIdentifier)
+            endmethod
+            method set
+            proc
+                mHelpIdentifier = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Information line text
+        ;;; </summary>
+        public property InfoLineText, string
+            method get
+            proc
+                mreturn %atrim(mInfoLineText)
+            endmethod
+            method set
+            proc
+                mInfoLineText = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; User text string
+        ;;; </summary>
+        public property UserText, string
+            method get
+            proc
+                mreturn %atrim(mUserText)
+            endmethod
+            method set
+            proc
+                mUserText = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Alternate name
+        ;;; </summary>
+        public property AlternateName, string
+            method get
+            proc
+                mreturn %atrim(mAlternateName)
+            endmethod
+            method set
+            proc
+                mAlternateName = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Field font palette name
+        ;;; </summary>
+        public property FieldFont, string
+            method get
+            proc
+                mreturn %atrim(mFieldFont)
+            endmethod
+            method set
+            proc
+                mFieldFont = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Prompt font palette name
+        ;;; </summary>
+        public property PromptFont, string
+            method get
+            proc
+                mreturn %atrim(mPromptFont)
+            endmethod
+            method set
+            proc
+                mPromptFont = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Default value
+        ;;; </summary>
+        public property DefaultValue, string
+            method get
+            proc
+                mreturn %atrim(mDefaultValue)
+            endmethod
+            method set
+            proc
+                mDefaultValue = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Arrive method name
+        ;;; </summary>
+        public property ArriveMethod, string
+            method get
+            proc
+                mreturn %atrim(mArriveMethod)
+            endmethod
+            method set
+            proc
+                mArriveMethod = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Leave method name
+        ;;; </summary>
+        public property LeaveMethod, string
+            method get
+            proc
+                mreturn %atrim(mLeaveMethod)
+            endmethod
+            method set
+            proc
+                mLeaveMethod = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Drill method name
+        ;;; </summary>
+        public property DrillMethod, string
+            method get
+            proc
+                mreturn %atrim(mDrillMethod)
+            endmethod
+            method set
+            proc
+                mDrillMethod = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Hyperlink method name
+        ;;; </summary>
+        public property HyperlinkMethod, string
+            method get
+            proc
+                mreturn %atrim(mHyperlinkMethod)
+            endmethod
+            method set
+            proc
+                mHyperlinkMethod = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Change method name
+        ;;; </summary>
+        public property ChangeMethod, string
+            method get
+            proc
+                mreturn %atrim(mChangeMethod)
+            endmethod
+            method set
+            proc
+                mChangeMethod = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Display method name
+        ;;; </summary>
+        public property DisplayMethod, string
+            method get
+            proc
+                mreturn %atrim(mDisplayMethod)
+            endmethod
+            method set
+            proc
+                mDisplayMethod = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Edit format method name
+        ;;; </summary>
+        public property EditFormatMethod, string
+            method get
+            proc
+                mreturn %atrim(mEditFormatMethod)
+            endmethod
+            method set
+            proc
+                mEditFormatMethod = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Numeric range exists
+        ;;; </summary>
+        public property NumericRangeExists, int
+            method get
+            proc
+                mreturn mt_info.ti_range
+            endmethod
+            method set
+            proc
+                mt_info.ti_range = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Numeric field range minimum
+        ;;; </summary>
+        public property NumericRangeMinimum, decimal
+            method get
+            proc
+                mreturn mfti_range.fti_rgmin
+            endmethod
+            method set
+            proc
+                mfti_range.fti_rgmin = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Numeric field range maximum
+        ;;; </summary>
+        public property NumericRangeMaximum, decimal
+            method get
+            proc
+                mreturn mfti_range.fti_rgmax
+            endmethod
+            method set
+            proc
+                mfti_range.fti_rgmax = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Enumerated
+        ;;; </summary>
+        public property Enumerated, int
+            method get
+            proc
+                mreturn mt_info.ti_enum
+            endmethod
+            method set
+            proc
+                mt_info.ti_enum = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Enumerated field display length
+        ;;; </summary>
+        public property EnumeratedDisplayLength, int
+            method get
+            proc
+                mreturn mfti_enum.fti_enmlen
+            endmethod
+            method set
+            proc
+                mfti_enum.fti_enmlen = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Enumerated field base value
+        ;;; </summary>
+        public property EnumeratedBaseValue, int
+            method get
+            proc
+                mreturn mfti_enum.fti_enmbase
+            endmethod
+            method set
+            proc
+                mfti_enum.fti_enmbase = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Enumerated field step value
+        ;;; </summary>
+        public property EnumeratedStepValue, int
+            method get
+            proc
+                mreturn mfti_enum.fti_enmstep
+            endmethod
+            method set
+            proc
+                mfti_enum.fti_enmstep = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Coerced type
+        ;;; </summary>
+        public property CoercedType, RpsFieldCoercedType
+            method get
+            proc
+                mreturn mCoercedType
+            endmethod
+            method set
+            proc
+                mCoercedType = value
+            endmethod
+        endproperty
+
+        public property Range, fti_range
+            method get
+            proc
+                mreturn mfti_range
+            endmethod
+            method set
+            proc
+                mfti_range = value
+            endmethod
+        endproperty
+
+        public property Enum, fti_enum
+            method get
+            proc
+                mreturn mfti_enum
+            endmethod
+            method set
+            proc
+                mfti_enum = value
+            endmethod
+        endproperty
+
+    endclass
+
+endnamespace

@@ -1,0 +1,157 @@
+;;*****************************************************************************
+;;
+;; Title:       RpsFieldCollection.dbl
+;;
+;; Type:        Class
+;;
+;; Description: Represents a collection of fields for a Repository structure
+;;
+;; Date:        2nd March 2024
+;;
+;; Author:      Steve Ives, Synergex Professional Services Group
+;;              http://www.synergex.com
+;;
+;;*****************************************************************************
+;;
+;; Copyright (c) 2024, Synergex International, Inc.
+;; All rights reserved.
+;;
+;; Redistribution and use in source and binary forms, with or without
+;; modification, are permitted provided that the following conditions are met:
+;;
+;; * Redistributions of source code must retain the above copyright notice,
+;;   this list of conditions and the following disclaimer.
+;;
+;; * Redistributions in binary form must reproduce the above copyright notice,
+;;   this list of conditions and the following disclaimer in the documentation
+;;   and/or other materials provided with the distribution.
+;;
+;; THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+;; AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+;; IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+;; ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+;; LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+;; CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+;; SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+;; INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+;; CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+;; ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+;; POSSIBILITY OF SUCH DAMAGE.
+;;
+;;*****************************************************************************
+
+import System.Collections.Generic
+
+namespace SynPSG.RepositoryAPI
+
+    public class RpsFieldCollection extends List<RpsField>
+
+        ;;Constructor (don't load any fields)
+        public method RpsFieldCollection
+        proc
+        endmethod
+
+        ;;Constructor (expand array field into individual fields)
+        public method RpsFieldCollection
+            required in     myField     ,@RpsField
+            required in     expandArray ,Boolean
+            endparams
+            record
+                isArray             ,Boolean
+            endrecord
+        proc
+            isArray = (myField.ArrayDimension[1] > 1 || myField.ArrayDimension[2] > 0)
+            if (isArray && expandArray) then
+            begin
+                if (myField.ArrayDimension[1]) then
+                begin
+                    data ix1 ,i4 ,0
+                    data ix2 ,i4 ,0
+                    data ix3 ,i4 ,0
+                    data ix4 ,i4 ,0
+                    data nm1 ,string ,''
+                    data sp1 ,i4 ,0
+                    data sp2 ,i4 ,0
+
+                    nm1 = myField.Name
+                    sp1 = myField.StartPosition
+                    for ix1 from 1 thru myField.ArrayDimension[1]
+                    begin
+                        if (myField.ArrayDimension[2]) then
+                        begin
+                            for ix2 from 1 thru myField.ArrayDimension[2]
+                            begin
+                                if (myField.ArrayDimension[3]) then
+                                begin
+                                    for ix3 from 1 thru myField.ArrayDimension[3]
+                                    begin
+                                        if (myField.ArrayDimension[4]) then
+                                        begin
+                                            ;4 dimensions
+                                            for ix4 from 1 thru myField.ArrayDimension[4]
+                                            begin
+                                                data myField4 = new RpsField(myField)
+                                                myField4.Name = nm1 + RpsUtils.FormatArgs(ix1,ix2,ix3,ix4,1)
+                                                clear myField4.ArrayDimension[2], myField4.ArrayDimension[3], myField4.ArrayDimension[4]
+                                                myField4.ArrayDimension[1] = 1
+                                                myField4.StartPosition = sp1+sp2
+                                                this.Add(myField4)
+                                                sp2 += myField.Size
+                                            end
+                                        end
+                                        else
+                                        begin
+                                            ;3 dimensions
+                                            data myField3 = new RpsField(myField)
+                                            myField3.Name = nm1 + RpsUtils.FormatArgs(ix1,ix2,ix3,0,1)
+                                            clear myField3.ArrayDimension[2], myField3.ArrayDimension[3], myField3.ArrayDimension[4]
+                                            myField3.ArrayDimension[1] = 1
+                                            myField3.StartPosition = sp1+sp2
+                                            this.Add(myField3)
+                                            sp2 += myField.Size
+                                        end
+                                    end
+                                end
+                                else
+                                begin
+                                    ;2 dimensions
+                                    data myField2 = new RpsField(myField)
+                                    myField2.Name = nm1 + RpsUtils.FormatArgs(ix1,ix2,0,0,1)
+                                    clear myField2.ArrayDimension[2], myField2.ArrayDimension[3], myField2.ArrayDimension[4]
+                                    myField2.ArrayDimension[1] = 1
+                                    myField2.StartPosition = sp1+sp2
+                                    this.Add(myField2)
+                                    sp2 += myField.Size
+                                end
+                            end
+                        end
+                        else
+                        begin
+                            ;1 dimension
+                            data myField1 = new RpsField(myField)
+                            myField1.Name = nm1 + RpsUtils.FormatArgs(ix1,0,0,0,1)
+                            clear myField1.ArrayDimension[2], myField1.ArrayDimension[3], myField1.ArrayDimension[4]
+                            myField1.ArrayDimension[1] = 1
+                            myField1.StartPosition = sp1+sp2
+                            this.Add(myField1)
+                            sp2 += myField.Size
+                        end
+                    end
+                end
+                else
+                begin
+                    ;not array (should never get here)
+                    myField.Name = myField.Name + RpsUtils.FormatArgs(1,0,0,0,1)
+                    this.Add(myField)
+                end
+            end
+            else
+            begin
+                ;not array or not expanding array
+                this.Add(myField)
+            end
+        endmethod
+
+    endclass
+
+endnamespace

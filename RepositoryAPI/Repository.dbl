@@ -1,0 +1,2526 @@
+;;*****************************************************************************
+;;
+;; Title:       Repository.dbl
+;;
+;; Type:        Class
+;;
+;; Description: Access a Synergy/DE Repository (via ddlib.elb)
+;;
+;; Date:        2nd March 2024
+;;
+;; Author(s):   Steve Ives, Synergex Professional Services Group
+;;              William Hawkins, Synergex Professional Services Group
+;;              http://www.synergex.com
+;;
+;;*****************************************************************************
+;;
+;; Copyright (c) 2024, Synergex International, Inc.
+;; All rights reserved.
+;;
+;; Redistribution and use in source and binary forms, with or without
+;; modification, are permitted provided that the following conditions are met:
+;;
+;; * Redistributions of source code must retain the above copyright notice,
+;;   this list of conditions and the following disclaimer.
+;;
+;; * Redistributions in binary form must reproduce the above copyright notice,
+;;   this list of conditions and the following disclaimer in the documentation
+;;   and/or other materials provided with the distribution.
+;;
+;; THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+;; AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+;; IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+;; ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+;; LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+;; CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+;; SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+;; INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+;; CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+;; ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+;; POSSIBILITY OF SUCH DAMAGE.
+;;
+;;*****************************************************************************
+
+import System.Collections
+import System.Collections.Generic
+import SynPSG.RepositoryAPI
+
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+namespace SynPSG.RepositoryAPI
+
+    public class Repository implements IDisposable
+
+.region "Class data"
+
+        private static RpsControl        ,dcs
+
+        ;global repository items
+        private mStructures             ,@RpsStructureCollection
+        private mFiles                  ,@RpsFileCollection
+        private mTemplates              ,@RpsTemplateCollection
+        private mFormats                ,@RpsFormatCollection
+        private mDateFormats            ,@RpsFormatCollection
+        private mTimeFormats            ,@RpsFormatCollection
+        private mEnumerations           ,@RpsEnumCollection
+
+        ;data loaded for a single file
+        private cFile                   ,@RpsFile
+
+        ;data loaded for a single structure
+        private cStructure              ,@RpsStructure
+
+.endregion
+
+.region "Public data"
+
+        public Config                   ,RpsConfig
+
+.endregion
+
+.region "Constructors & Destructor"
+
+        ;;---------------------------------------------------------------------
+        ;;Constructors
+
+        ;;; <summary>
+        ;;; Open Default repository
+        ;;; </summary>
+        public method Repository
+            endparams
+        proc
+            OpenRps()
+        endmethod
+
+        ;;; <summary>
+        ;;; Open a specified repository
+        ;;; </summary>
+        ;;; <param name="MainFile">Repository main file</param>
+        ;;; <param name="TextFile">Repository text file</param>
+        public method Repository
+            required in MainFile, String
+            required in TextFile, String
+            endparams
+        proc
+            OpenRps(MainFile,TextFile)
+        endmethod
+
+        ;----------------------------------------------------------------------
+        ; Implement IDisposable
+
+        public method Dispose, void
+        proc
+            CloseRps()
+        endmethod
+
+.endregion
+
+.region "Private methods"
+
+        ;;; <summary>
+        ;;; Open the default repository
+        ;;; </summary>
+        private method OpenRps, void
+            endparams
+            record
+                tmpMainFile, a256
+                tmpTextFile, a256
+            endrecord
+        proc
+            xcall dd_init(RpsControl,,,tmpMainFile,tmpTextFile)
+            if (RpsControl.error)
+                throw new RpsException("Failed to open repository")
+
+            this.MainFile = %atrim(tmpMainFile)
+            this.TextFile = %atrim(tmpTextFile)
+        endmethod
+
+        ;;; <summary>
+        ;;; Open a specific repository
+        ;;; </summary>
+        ;;; <param name="aMainFile">Repository main file</param>
+        ;;; <param name="aTextFile">Repository text file</param>
+        private method OpenRps, void
+            required in aMainFile, a
+            required in aTextFile, a
+            endparams
+            record
+                tmpMainFile, a256
+                tmpTextFile, a256
+            endrecord
+        proc
+            xcall dd_init(RpsControl,aMainFile,aTextFile,tmpMainFile,tmpTextFile)
+            if (RpsControl.error)
+                throw new RpsException("Failed to open repository")
+
+            this.MainFile = %atrim(tmpMainFile)
+            this.TextFile = %atrim(tmpTextFile)
+            GetControlRecord()
+        endmethod
+
+        ;;; <summary>
+        ;;; Get the control record from the currently open repository
+        ;;; </summary>
+        private method GetControlRecord, void
+            endparams
+        proc
+            data cinfo, c_info
+
+            xcall dd_control(RpsControl,DDC_INFO,cinfo)
+
+            if (RpsControl.error)
+                throw new RpsException("Failed to get repository control record")
+
+            this.LastModified = cinfo.ci_tstamp
+            this.LastStructureAddDelete = cinfo.ci_str_tstamp
+            this.Version = %atrim(cinfo.ci_ver)
+
+        endmethod
+
+        ;;; <summary>
+        ;;; Close the current repository
+        ;;; </summary>
+        private method CloseRps, void
+            endparams
+        proc
+            ;;If it looks like the repository is open
+            if ((RpsControl.mchn_r) && (%chopen(RpsControl.mchn_r))
+            &    &&(RpsControl.tchn_r) && (%chopen(RpsControl.tchn_r)))
+            begin
+                ;;Close it
+                try
+                    xcall dd_exit(RpsControl)
+                catch (ex)
+                    nop
+                endtry
+            end
+
+            ;;And clear down our instance data
+            init RpsControl
+
+            clear mStructures
+            clear mFiles
+            clear mTemplates
+            clear mFormats
+            clear mDateFormats
+            clear mTimeFormats
+            clear mEnumerations
+
+            clear cFile
+            clear cStructure
+
+        endmethod
+
+.endregion
+
+.region "Public methods"
+
+        ;;; <summary>
+        ;;; Close the current repository and open the default one
+        ;;; </summary>
+        public method Open, void
+            endparams
+        proc
+            CloseRps()
+            OpenRps()
+        endmethod
+
+        ;;; <summary>
+        ;;; Close the current repository and open a specified one
+        ;;; </summary>
+        ;;; <param name="aMainFile">Repository main file</param>
+        ;;; <param name="aTextFile">Repository text file</param>
+        public method Open, void
+            required in aMainFile, a
+            required in aTextFile, a
+            endparams
+        proc
+            CloseRps()
+            OpenRps(aMainFile,aTextFile)
+        endmethod
+
+.endregion
+
+.region "Public properties"
+
+        ;;; <summary>
+        ;;; Repository main file spec
+        ;;; </summary>
+        public setprivate property MainFile, String
+
+        ;;; <summary>
+        ;;; Repository text file spec
+        ;;; </summary>
+        public setprivate property TextFile, String
+
+        ;;; <summary>
+        ;;; Last modification timestamp (a14, YYYYMMDDHHMMSS)
+        ;;; </summary>
+        public setprivate property LastModified, String
+
+        ;;; <summary>
+        ;;; Last structure addition / deletion (a14, YYYYMMDDHHMMSS)
+        ;;; </summary>
+        public setprivate property LastStructureAddDelete, String
+
+        ;;; <summary>
+        ;;; Repository version
+        ;;; </summary>
+        public setprivate property Version, String
+
+        ;;; <summary>
+        ;;; Collection of structures in the repository
+        ;;; </summary>
+        public property Structures, @RpsStructureCollection
+            method get
+            proc
+                ;Load the structures collection the first time it is referenced
+                if (mStructures==^null)
+                    mStructures = LoadStructures()
+                mreturn mStructures
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Collection of files in the repository
+        ;;; </summary>
+        public property Files, @RpsFileCollection
+            method get
+            proc
+                ;Load the files collection the first time it is referenced
+                if (mFiles==^null)
+                    mFiles = LoadFiles()
+                mreturn mFiles
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Collection of templates in the repository
+        ;;; </summary>
+        public property Templates, @RpsTemplateCollection
+            method get
+            proc
+                ;Load the templates collection the first time it is referenced
+                if (mTemplates==^null)
+                    mTemplates = LoadTemplates()
+                mreturn mTemplates
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Collection of global formats in the repository
+        ;;; </summary>
+        public property Formats, @RpsFormatCollection
+            method get
+            proc
+                ;Load the formats collection the first time it is referenced
+                if (mFormats==^null)
+                    mFormats = LoadFormats(RpsGlobalFormatType.Format)
+                mreturn mFormats
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Collection of pre-defined date formats
+        ;;; </summary>
+        public property DateFormats, @RpsFormatCollection
+            method get
+            proc
+                ;Load the date formats collection the first time it is referenced
+                if (mDateFormats==^null)
+                    mDateFormats = LoadFormats(RpsGlobalFormatType.DateFormat)
+                mreturn mDateFormats
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Collection of pre-defined time formats
+        ;;; </summary>
+        public property TimeFormats, @RpsFormatCollection
+            method get
+            proc
+                ;Load the time formats collection the first time it is referenced
+                if (mTimeFormats==^null)
+                    mTimeFormats = LoadFormats(RpsGlobalFormatType.TimeFormat)
+                mreturn mTimeFormats
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Collection of enumerations in the repository
+        ;;; </summary>
+        public property Enumerations, @RpsEnumCollection
+            method get
+            proc
+                ;Load the enumerations collection the first time it is referenced
+                if (mEnumerations==^null)
+                    mEnumerations = LoadEnumerations()
+                mreturn mEnumerations
+            endmethod
+        endproperty
+
+        public property Info ,dcs
+            method get
+            proc
+                mreturn RpsControl
+            endmethod
+        endproperty
+
+.endregion
+
+.region "Repository Methods"
+
+        public method LoadTemplates, @RpsTemplateCollection
+            endparams
+            record local_data
+                MemHandle       ,D_HANDLE
+                TemplateCount   ,int
+                ix              ,int
+            endrecord
+            record
+                myTemplates     ,@RpsTemplateCollection
+            endrecord
+        proc
+            init local_data
+            myTemplates = new RpsTemplateCollection()
+            try
+            begin
+                ;;Get the number of templates in the repository
+                xcall dd_name(RpsControl,DDN_COUNT,DDN_TEMPLATE,TemplateCount)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get number of repository templates")
+
+                ;;Do we have any templates to load?
+                if (TemplateCount)
+                begin
+                    ;;Allocate template name memory and get template names
+                    MemHandle = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*TemplateCount)
+                    xcall dd_name(RpsControl,DDN_LIST,DDN_TEMPLATE,TemplateCount,^m(rpsIdentifier,MemHandle))
+                    if (RpsControl.error)
+                        throw new RpsTemplateException("Failed to get repository template names")
+
+                    for ix from 1 thru TemplateCount
+                        myTemplates.Add(LoadTemplate(^m(rpsIdentifier[ix],MemHandle)))
+                end
+            end
+            finally
+            begin
+                ;;Release template names memory
+                if (TemplateCount)
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+            end
+            endtry
+            mreturn myTemplates
+        endmethod
+
+        private method LoadTemplate, @RpsTemplate
+            required in TemplateName, String
+            endparams
+            record
+                myTemplate  ,@RpsTemplate
+                mt_info     ,t_info
+                abuf        ,a1800
+            endrecord
+        proc
+            myTemplate = new RpsTemplate()
+
+            ;;Save the template name
+            myTemplate.Name = TemplateName.Trim().ToUpper()
+
+            ;;Load the template information structure
+            xcall dd_template(RpsControl,DDT_INFO,TemplateName,mt_info)
+            if (RpsControl.error)
+                throw new RpsTemplateException("Failed to get information for repository template "+myTemplate.Name)
+
+            ;;Load extended data
+
+            myTemplate.ArrayDimension[1] = mt_info.ti_dim[1]
+            myTemplate.ArrayDimension[2] = mt_info.ti_dim[2]
+            myTemplate.ArrayDimension[3] = mt_info.ti_dim[3]
+            myTemplate.ArrayDimension[4] = mt_info.ti_dim[4]
+
+            ;;Load description (a40)
+            if (mt_info.ti_desc)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_desc,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get description for repository template "+myTemplate.Name)
+                myTemplate.Description = %atrim(abuf)
+            end
+
+            ;;Load long description (a1800)
+            if (mt_info.ti_ldesc)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_ldesc,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get long description for repository template "+myTemplate.Name)
+                myTemplate.Description = %atrim(abuf)
+            end
+
+            ;;Load user defined field type (a30)
+            if (mt_info.ti_usrtyp)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_usrtyp,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get user defined type for repository template "+myTemplate.Name)
+                myTemplate.UserFieldType = %atrim(abuf)
+            end
+
+            ;;Load report heading (a40)
+            if (mt_info.ti_heading)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_heading,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get report heading for repository template "+myTemplate.Name)
+                myTemplate.ReportHeading = %atrim(abuf)
+            end
+
+            ;;Load prompt (a80)
+            if (mt_info.ti_prompt)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_prompt,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get prompt for repository template "+myTemplate.Name)
+                myTemplate.Prompt = %atrim(abuf)
+            end
+
+            ;;Load help identifier (a80)
+            if (mt_info.ti_help)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_help,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get help identifier for repository template "+myTemplate.Name)
+                myTemplate.HelpIdentifier = %atrim(abuf)
+            end
+
+            ;;Load information line text (a80)
+            if (mt_info.ti_infoln)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_infoln,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get information line text for repository template "+myTemplate.Name)
+                myTemplate.InfoLineText = %atrim(abuf)
+            end
+
+            ;;Load user text string (a80)
+            if (mt_info.ti_utext)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_utext,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get user text for repository template "+myTemplate.Name)
+                myTemplate.UserText = %atrim(abuf)
+            end
+
+            ;;Load alternate name (a30)
+            if (mt_info.ti_altnm)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_altnm,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get alternate name for repository template "+myTemplate.Name)
+                myTemplate.AlternateName = %atrim(abuf)
+            end
+
+            ;;Load field font (a30)
+            if (mt_info.ti_font)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_font,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get field font for repository template "+myTemplate.Name)
+                myTemplate.FieldFont = %atrim(abuf)
+            end
+
+            ;;Load prompt font (a30)
+            if (mt_info.ti_prmptfont)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_prmptfont,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get prompt font for repository template "+myTemplate.Name)
+                myTemplate.PromptFont = %atrim(abuf)
+            end
+
+            ;;Load default value (a80)
+            if (mt_info.ti_def)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_def,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get default value for repository template "+myTemplate.Name)
+                myTemplate.DefaultValue = %atrim(abuf)
+            end
+
+            ;;Load arrive method (a30)
+            if (mt_info.ti_arrivemeth)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_arrivemeth,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get arrive method for repository template "+myTemplate.Name)
+                myTemplate.ArriveMethod = %atrim(abuf)
+            end
+
+            ;;Load leave method (a30)
+            if (mt_info.ti_leavemeth)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_leavemeth,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get leave method for repository template "+myTemplate.Name)
+                myTemplate.LeaveMethod = %atrim(abuf)
+            end
+
+            ;;Load drill method (a30)
+            if (mt_info.ti_drillmeth)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_drillmeth,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get drill method for repository template "+myTemplate.Name)
+                myTemplate.DrillMethod = %atrim(abuf)
+            end
+
+            ;;Load hyperlink method (a30)
+            if (mt_info.ti_hypermeth)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_hypermeth,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get hyperlink method for repository template "+myTemplate.Name)
+                myTemplate.HyperlinkMethod = %atrim(abuf)
+            end
+
+            ;;Load change method (a30)
+            if (mt_info.ti_changemeth)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_changemeth,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get change method for repository template "+myTemplate.Name)
+                myTemplate.ChangeMethod = %atrim(abuf)
+            end
+
+            ;;Load display format method (a30)
+            if (mt_info.ti_dispmeth)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_dispmeth,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get display method for repository template "+myTemplate.Name)
+                myTemplate.DisplayMethod = %atrim(abuf)
+            end
+
+            ;;Load edit format method (a30)
+            if (mt_info.ti_editfmtmeth)
+            begin
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_editfmtmeth,abuf)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get edit format method for repository template "+myTemplate.Name)
+                myTemplate.EditFormatMethod = %atrim(abuf)
+            end
+
+            ;;Load enumerated field name
+            if ((mt_info.ti_type == T_INT) && (mt_info.ti_class == C_ENUM) && (mt_info.ti_enmfld))
+            begin
+                data tmpEnumName, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mt_info.ti_enmfld,tmpEnumName)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get emumeration name for repository template "+myTemplate.Name)
+                myTemplate.EnumName = %atrim(tmpEnumName)
+            end
+
+            ;;Allowed values (@ArrayList)
+            myTemplate.AllowList = new ArrayList()
+            if (mt_info.ti_alwlst && mt_info.ti_alwct)
+            begin
+                data ListData, fti_entlst
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_alwlst,ListData)
+                if (RpsControl.error) then
+                    throw new RpsTemplateException("Failed to get allow list entries for repository template "+myTemplate.Name)
+                else
+                begin
+                    data idx, int
+                    for idx from 1 thru mt_info.ti_alwct
+                        myTemplate.AllowList.Add((@a)ListData.fti_entlstary[idx])
+                end
+            end
+
+            ;;Valid selections (@ArrayList)
+            myTemplate.SelectionList = new ArrayList()
+            if (mt_info.ti_sellist && mt_info.ti_selct)
+            begin
+                data ListData, fti_entlst
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_sellist,ListData)
+                if (RpsControl.error) then
+                    throw new RpsTemplateException("Failed to get selection list entries for repository template "+myTemplate.Name)
+                else
+                begin
+                    data idx, int
+                    for idx from 1 thru mt_info.ti_selct
+                        myTemplate.SelectionList.Add((@a)ListData.fti_entlstary[idx])
+                end
+            end
+
+            ;;Load numeric range values (fti_range)
+            if (mt_info.ti_range)
+            begin
+                data mfti_range ,fti_range
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_range,(a)mfti_range)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get ranges for repository template "+myTemplate.Name)
+                myTemplate.Range = mfti_range
+            end
+
+            ;;Load enumeration data (fti_enum)
+            if (mt_info.ti_enum)
+            begin
+                data mfti_enum ,fti_enum
+                xcall dd_template(RpsControl,DDT_TEXT,mt_info.ti_enum,(a)mfti_enum)
+                if (RpsControl.error)
+                    throw new RpsTemplateException("Failed to get emumeration data for repository template "+myTemplate.Name)
+                myTemplate.Enum = mfti_enum
+            end
+
+            ;;Load the fields coerced type
+            using mt_info.ti_type select
+            (T_DEC),
+            begin
+                using mt_info.ti_class select
+                (C_YYMMDD,C_YYYYMMDD,C_YYJJJ,C_YYYYJJJ,C_YYPP,C_YYYYPP,C_HHMMSS,C_HHMM),
+                begin
+                    using mt_info.ti_coertype select
+                    (CT_DATETIME),
+                        myTemplate.CoercedType = RpsFieldCoercedType.CtNone
+                    (CT_NULLDATETIME),
+                        myTemplate.CoercedType = RpsFieldCoercedType.CtNullDateTime
+                    endusing
+                end
+                (),
+                begin
+                    if (mt_info.ti_prec) then
+                    begin
+                        using mt_info.ti_coertype select
+                        (CT_DECIMAL),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtNone
+                        (CT_DOUBLE),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtDouble
+                        (CT_FLOAT),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtFloat
+                        endusing
+                    end
+                    else
+                    begin
+                        using mt_info.ti_coertype select
+                        (CT_DEFAULT),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtNone
+                        (CT_BYTE),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtByte
+                        (CT_SHORT),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtShort
+                        (CT_INT),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtInt
+                        (CT_LONG),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtLong
+                        (CT_SBYTE),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtSbyte
+                        (CT_USHORT),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtUshort
+                        (CT_UINT),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtUint
+                        (CT_ULONG),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtUlong
+                        (CT_BOOLEAN),
+                            myTemplate.CoercedType = RpsFieldCoercedType.CtBoolean
+                        endusing
+                    end
+                end
+                endusing
+            end
+            (T_INT),
+            begin
+                using mt_info.ti_coertype select
+                (CT_DEFAULT),
+                    myTemplate.CoercedType = RpsFieldCoercedType.CtNone
+                (CT_BYTE),
+                    myTemplate.CoercedType = RpsFieldCoercedType.CtByte
+                (CT_SHORT),
+                    myTemplate.CoercedType = RpsFieldCoercedType.CtShort
+                (CT_INT),
+                    myTemplate.CoercedType = RpsFieldCoercedType.CtInt
+                (CT_LONG),
+                    myTemplate.CoercedType = RpsFieldCoercedType.CtLong
+                (CT_SBYTE),
+                    myTemplate.CoercedType = RpsFieldCoercedType.CtSbyte
+                (CT_USHORT),
+                    myTemplate.CoercedType = RpsFieldCoercedType.CtUshort
+                (CT_UINT),
+                    myTemplate.CoercedType = RpsFieldCoercedType.CtUint
+                (CT_ULONG),
+                    myTemplate.CoercedType = RpsFieldCoercedType.CtUlong
+                (CT_BOOLEAN),
+                    myTemplate.CoercedType = RpsFieldCoercedType.CtBoolean
+                endusing
+            end
+            (),
+                myTemplate.CoercedType = RpsFieldCoercedType.CtNone
+            endusing
+
+        endmethod
+
+        public method LoadFormats, @RpsFormatCollection
+            required in GlobalFormatType, RpsGlobalFormatType
+            endparams
+            record local_data
+                MemHandle       ,D_HANDLE
+                FormatCount     ,int
+                ix              ,int
+            endrecord
+            record
+                myFormats       ,@RpsFormatCollection
+            endrecord
+        proc
+            myFormats = new RpsFormatCollection()
+            init local_data
+            try
+            begin
+                ;;Get the global format count
+                xcall dd_name(RpsControl,DDN_COUNT,GlobalFormatType,FormatCount)
+                if (RpsControl.error)
+                    throw new RpsFormatException("Failed to get repository global format count")
+
+                ;;Do we have any formats to load?
+                if (FormatCount)
+                begin
+                    ;;Size the format names array and get the format names
+                    MemHandle = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*FormatCount)
+                    xcall dd_name(RpsControl,DDN_LIST,GlobalFormatType,FormatCount,^m(rpsIdentifier,MemHandle))
+                    if (RpsControl.error)
+                        throw new RpsFormatException("Failed to get repository global format names")
+
+                    ;;Add formats to collection
+                    for ix from 1 thru FormatCount
+                        myFormats.Add(LoadGlobalFormat(^m(rpsIdentifier[ix],MemHandle)))
+                end
+            end
+            finally
+            begin
+                ;;Free format names array
+                if (MemHandle)
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+            end
+            endtry
+            mreturn myFormats
+        endmethod
+
+        private method LoadGlobalFormat, @RpsFormat
+            required in FormatName, String
+            endparams
+            record
+                myFormat    ,@RpsFormat
+            endrecord
+        proc
+            myFormat = new RpsFormat()
+            begin
+                data tmpFormatType, a1
+                data tmpFormatString, a30
+
+                ;;Save the format name
+                myFormat.Name = FormatName.Trim().ToUpper()
+
+                ;;Load format information
+                xcall dd_format(Repository.RpsControl,DDM_INFO,myFormat.Name,tmpFormatType,tmpFormatString)
+                if (Repository.RpsControl.error)
+                    throw new RpsFormatException("Failed to get information for repository global format "+FormatName)
+
+                myFormat.FormatString = %atrim(tmpFormatString)
+
+                ;;Set the format type
+                using tmpFormatType select
+                ("A"),
+                    myFormat.FormatType = RpsFormatType.Alpha
+                ("N"),
+                    myFormat.FormatType = RpsFormatType.Numeric
+                endusing
+            end
+            mreturn myFormat
+        endmethod
+
+        public method LoadEnumerations, @RpsEnumCollection
+            endparams
+            record local_data
+                MemHandle       ,D_HANDLE
+                EnumCount       ,int
+                ix              ,int
+            endrecord
+            record
+                myEnums         ,@RpsEnumCollection
+            endrecord
+        proc
+            myEnums = new RpsEnumCollection()
+            init local_data
+            try
+            begin
+                ;Get the number of enumerations in the repository
+                xcall dd_name(RpsControl,DDN_COUNT,DDN_ENUM,EnumCount)
+                if (RpsControl.error)
+                    throw new RpsEnumException("Failed to get repository enumeration count")
+
+                ;Do we have any enumerations to load?
+                if (EnumCount)
+                begin
+                    ;Allocate enumeration name memory and get enum names
+                    MemHandle = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*EnumCount)
+                    xcall dd_name(RpsControl,DDN_LIST,DDN_ENUM,EnumCount,^m(rpsIdentifier,MemHandle))
+                    if (RpsControl.error)
+                        throw new RpsEnumException("Failed to get repository enumeration names")
+
+                    for ix from 1 thru EnumCount
+                        myEnums.Add(LoadEnum(^m(rpsIdentifier[ix],MemHandle)))
+                end
+            end
+            finally
+            begin
+                ;;Free enumeration names array
+                if (MemHandle)
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+            end
+            endtry
+            mreturn myEnums
+        endmethod
+
+        public method LoadFiles, @RpsFileCollection
+            endparams
+            record local_data
+                MemHandle   ,D_HANDLE
+                FileCount   ,int
+                ix          ,int
+            endrecord
+            record
+                myFiles     ,@RpsFileCollection
+            endrecord
+        proc
+            init local_data
+            myFiles = new RpsFileCollection()
+            try
+            begin
+                ;;Get the number of files defined in the repository
+                xcall dd_name(RpsControl,DDN_COUNT,DDN_FILE,FileCount)
+                if (RpsControl.error)
+                    throw new RpsFileException("Failed to get number of repository file definitions")
+
+                ;;Do we have any files to load?
+                if (FileCount)
+                begin
+                    ;;Size the format names array and get the format names
+                    MemHandle = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*FileCount)
+                    xcall dd_name(RpsControl,DDN_LIST,DDN_FILE,FileCount,^m(rpsIdentifier,MemHandle))
+                    if (RpsControl.error)
+                        throw new RpsFileException("Failed to get repository file definition names")
+
+                    ;;Add files to collection
+                    for ix from 1 thru FileCount
+                    begin
+                        myFiles.Add(LoadFile(^m(rpsIdentifier[ix],MemHandle)))
+                    end
+                end
+            end
+            finally
+            begin
+                ;;Free file names array
+                if (MemHandle)
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+            end
+            endtry
+            mreturn myFiles
+        endmethod
+
+        public method LoadStructures, @RpsStructureCollection
+            endparams
+            record local_data
+                MemHandle       ,D_HANDLE
+                StructureCount  ,int
+                ix              ,int
+            endrecord
+            record
+                myStructures ,@RpsStructureCollection
+            endrecord
+        proc
+            myStructures = new RpsStructureCollection()
+            init local_data
+            try
+            begin
+                ;;Get the number of structures in the repository
+                xcall dd_name(RpsControl,DDN_COUNT,DDN_STRUCT,StructureCount)
+                if (RpsControl.error)
+                    throw new RpsStructureException("Failed to get repository structure count")
+
+                ;;Do we have any structures to load?
+                if (StructureCount)
+                begin
+                    ;;Allocate structure name memory and get structure names
+                    MemHandle = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*StructureCount)
+                    xcall dd_name(RpsControl,DDN_LIST,DDN_STRUCT,StructureCount,^m(rpsIdentifier,MemHandle))
+                    if (RpsControl.error)
+                        throw new RpsStructureException("Failed to get repository structure names")
+
+                    for ix from 1 thru StructureCount
+                        myStructures.Add(LoadStructure(^m(rpsIdentifier[ix],MemHandle),Config))
+                end
+            end
+            catch (ex, @Exception)
+            begin
+                throw new RpsStructureException("Failed to load repository structure. " + ex.Message)
+            end
+            finally
+            begin
+                ;;Release structure names memory
+                if (StructureCount)
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+            end
+            endtry
+            mreturn myStructures
+        endmethod
+
+.endregion
+
+.region "File methods"
+
+        public method LoadStructureFiles, @RpsFileCollection
+            required in StructureName, String
+            endparams
+            record local_data
+                MemHandle   ,D_HANDLE
+                ix          ,int
+            endrecord
+            record
+                myFiles     ,@RpsFileCollection
+            endrecord
+        proc
+            init local_data
+            myFiles = new RpsFileCollection()
+            try
+            begin
+                data ms_info, s_info
+                xcall dd_struct(RpsControl,DDS_INFO,StructureName,ms_info)
+                if (RpsControl.error)
+                    throw new RpsFileException("Failed to get information for repository structure "+StructureName)
+
+                ;;Do we have any files to load?
+                if (ms_info.si_nmfils)
+                begin
+                    ;;Size the file names array and get file names
+                    MemHandle = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*ms_info.si_nmfils)
+                    xcall dd_struct(RpsControl,DDS_FILS,ms_info.si_nmfils,^m(rpsIdentifier,MemHandle))
+                    if (RpsControl.error)
+                        throw new RpsFileException("Failed to get file names for repository structure "+StructureName)
+
+                    ;;Add files to collection
+                    for ix from 1 thru ms_info.si_nmfils
+                        myFiles.Add(LoadFile(^m(rpsIdentifier[ix],MemHandle)))
+                end
+            end
+            finally
+            begin
+                ;;Free file names array
+                if (MemHandle)
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+            end
+            endtry
+            mreturn myFiles
+        endmethod
+
+        public method LoadFile, @RpsFile
+            required in FileName, String
+            endparams
+        proc
+            data mfl_info ,fl_info
+
+            cFile = new RpsFile()
+
+            ;;Save the file name
+            cFile.Name = FileName.Trim().ToUpper()
+
+            ;;Load file information
+            xcall dd_file(RpsControl,DDL_INFO,cFile.Name,mfl_info)
+            if (RpsControl.error)
+                throw new RpsFileException("Failed to get information for repository file "+cFile.Name)
+
+            ;;Default the file's key density to 50% if not specified
+            if (!mfl_info.fli_density)
+                mfl_info.fli_density = 50
+
+            cFile.Info = mfl_info
+
+            ;;Load description
+            if (mfl_info.fli_desc)
+            begin
+                data tmpDescription, a40
+                xcall dd_file(RpsControl,DDL_TEXT,mfl_info.fli_desc,tmpDescription)
+                if (RpsControl.error)
+                    throw new RpsFileException("Failed to get description for repository file "+cFile.Name)
+                cFile.Description = %atrim(tmpDescription)
+            end
+
+            ;;Load long description
+            if (mfl_info.fli_ldesc)
+            begin
+                data tmpLongDescription, a1800
+                xcall dd_file(RpsControl,DDL_TEXT,mfl_info.fli_ldesc,tmpLongDescription)
+                if (RpsControl.error)
+                    throw new RpsFileException("Failed to get long description for repository file "+cFile.Name)
+                cFile.LongDescription = %atrim(tmpLongDescription)
+            end
+
+            ;;Load user text
+            if (mfl_info.fli_utext)
+            begin
+                data tmpUserText, a60
+                xcall dd_file(RpsControl,DDL_TEXT,mfl_info.fli_utext,tmpUserText)
+                if (RpsControl.error)
+                    throw new RpsFileException("Failed to get user text for repository file "+cFile.Name)
+                cFile.UserText = %atrim(tmpUserText)
+            end
+
+            ;;Load portable integer specs
+            if (mfl_info.fli_portable)
+            begin
+                data tmpPortableInts, a120
+                xcall dd_file(RpsControl,DDL_TEXT,mfl_info.fli_portable,tmpPortableInts)
+                if (RpsControl.error)
+                    throw new RpsFileException("Failed to get portable integer specifications for repository file "+cFile.Name)
+                cFile.PortableIntsSpecs = %atrim(tmpPortableInts)
+            end
+
+            ;;Load structure names and ODBC table names
+
+            cFile.StructureNames = new List<String>()
+            cFile.OdbcTableNames = new List<String>()
+
+            if (mfl_info.fli_nmstructs)
+            begin
+                data strNames,  D_HANDLE, %mem_proc(DM_ALLOC,^size(rpsIdentifier)*mfl_info.fli_nmstructs)
+                data odbcNames, D_HANDLE, %mem_proc(DM_ALLOC,^size(rpsIdentifier)*mfl_info.fli_nmstructs)
+
+                xcall dd_file(RpsControl,DDL_STRS,mfl_info.fli_nmstructs,^m(rpsIdentifier,strNames),,,^m(rpsIdentifier,odbcNames))
+
+                data strName, string
+                data odbcName, string
+
+                data ix, int
+                for ix from 1 thru mfl_info.fli_nmstructs
+                begin
+                    strName = %atrim(^m(rpsIdentifier[ix],strNames))
+                    odbcName = %atrim(^m(rpsIdentifier[ix],odbcNames))
+                    if (String.IsNullOrWhiteSpace(odbcName))
+                        odbcName = strName
+                    cFile.StructureNames.Add(strName)
+                    cFile.OdbcTableNames.Add(odbcName)
+                end
+
+                strNames  = %mem_proc(DM_FREE,strNames)
+                odbcNames = %mem_proc(DM_FREE,odbcNames)
+            end
+
+            if (mfl_info.fli_nmstructs == 1)
+            begin
+                if (cFile.Structures == ^null)
+                    cFile.Structures = new RpsStructureCollection()
+                cFile.Structures.Add(LoadStructure(cFile.StructureNames[0],Config))
+            end
+
+            mreturn cFile
+
+        endmethod
+
+.endregion
+
+.region "Structure methods"
+
+        public method LoadStructure, @RpsStructure
+            required in aRpsStructureName, a
+            required in aWantItems      ,RpsConfig
+            endparams
+        proc
+            data ms_info ,s_info
+
+            cStructure = new RpsStructure()
+
+            ;; Save the structure name
+            cStructure.Name = aRpsStructureName
+
+            ;; Load structure information
+            xcall dd_struct(RpsControl,DDS_INFO,cStructure.Name,ms_info)
+            if (RpsControl.error)
+                throw new RpsStructureNotFoundException(cStructure.Name)
+
+            begin
+                data myStructureFields ,@RpsFieldCollection
+                data myField ,@RpsField
+                myStructureFields = LoadStructureFields(cStructure)
+                cStructure.Fields = new RpsFieldCollection()
+                foreach myField in myStructureFields
+                    cStructure.Fields.Add(myField)
+
+                ;reset current structure info
+                cStructure.Name = aRpsStructureName
+
+                ;;cStructure.Fields = LoadStructureFields(cStructure)
+            end
+
+            cStructure.Info = ms_info
+
+            ;; Load the structures text-based attributes
+
+            ;; Description
+            if (ms_info.si_desc)
+            begin
+                data tmpDescription, a40
+                xcall dd_struct(RpsControl,DDS_TEXT,ms_info.si_desc,tmpDescription)
+                if (RpsControl.error)
+                    throw new RpsStructureException("Failed to get description for repository structure "+cStructure.Name)
+
+                cStructure.Description = %atrim(tmpDescription)
+            end
+
+            ;; Long description
+            if (ms_info.si_ldesc)
+            begin
+                data tmpDescription, a1800
+                xcall dd_struct(RpsControl,DDS_TEXT,ms_info.si_ldesc,tmpDescription)
+                if (RpsControl.error)
+                    throw new RpsStructureException("Failed to get long description for repository structure "+cStructure.Name)
+
+                cStructure.LongDescription = %atrim(tmpDescription)
+            end
+
+            ;; User text string
+            if (ms_info.si_utext)
+            begin
+                data tmpUserText, a60
+                xcall dd_struct(RpsControl,DDS_TEXT,ms_info.si_utext,tmpUserText)
+                if (RpsControl.error)
+                    throw new RpsStructureException("Failed to get user text for repository structure "+cStructure.Name)
+
+                cStructure.UserText = %atrim(tmpUserText)
+            end
+
+            ;begin
+            ;    data myStructureFields ,@RpsFieldCollection
+            ;    data myField ,@RpsField
+            ;    myStructureFields = LoadStructureFields(cStructure)
+            ;    cStructure.Fields = new RpsFieldCollection()
+            ;    foreach myField in myStructureFields
+            ;        cStructure.Fields.Add(myField)
+            ;    cStructure.Name = aRpsStructureName
+            ;
+            ;    ;;cStructure.Fields = LoadStructureFields(cStructure)
+            ;end
+
+            if (Config.WantKeys)
+                cStructure.Keys = LoadStructureKeys(cStructure)
+
+            if (Config.WantTags)
+                cStructure.Tags = LoadStructureTags(cStructure)
+
+            if (Config.WantFormats)
+                cStructure.Formats = LoadStructureFormats(cStructure)
+
+            if (Config.WantRelations)
+                cStructure.Relations = LoadStructureRelations(cStructure)
+
+            if (Config.WantStructureEnums)
+                cStructure.Enums = LoadStructureEnumerations(cStructure)
+
+            if (Config.WantStructureFiles)
+                mFiles = LoadStructureFiles(cStructure.Name)
+
+            mreturn cStructure
+        endmethod
+
+        ;;---------------------------------------------------------------------
+
+        ;;Stack of structure names used with nested implicit groups
+        private previousStructures, @Stack<string>, new Stack<string>()
+
+        ;;load fields for a structure or implicit group
+        private method LoadStructureFields ,@RpsFieldCollection
+            required in myStructure, @RpsStructure
+            record
+                str                 ,String
+                myStructureFields   ,@RpsFieldCollection
+                ms_info             ,s_info
+            endrecord
+        proc
+            str = %atrimtostring(RpsControl.sname)
+
+            ;;Preserve the name of the current (parent) structure
+            previousStructures.Push(str)
+            xcall dd_struct(RpsControl,DDS_INFO,str,ms_info)
+            if (RpsControl.error)
+                throw new RpsStructureException("Failed to reset context to original structure  " + str)
+
+            ;;Load the structure that defines the group
+            myStructureFields = LoadFields(myStructure)
+
+            ;;Reset to the parent structure
+            if (previousStructures.Count > 0)
+            begin
+                str = previousStructures.Pop()
+                xcall dd_struct(RpsControl,DDS_INFO,str,ms_info)
+                if (RpsControl.error)
+                    throw new RpsStructureException("Failed to reset context to original structure  " + str)
+            end
+            mreturn myStructureFields
+        endmethod
+
+        ;;Load fields (should only be called from LoadStructureFields)
+        private method LoadFields, @RpsFieldCollection
+            required in myStructure, @RpsStructure
+            record local_data
+                MemHandle       ,D_HANDLE
+                MemHandle2      ,D_HANDLE
+                ix              ,int
+                fieldOffset     ,int
+            endrecord
+            record
+                str             ,string
+                myFields        ,@RpsFieldCollection
+                myField         ,@RpsField
+                myArrayFields   ,@RpsFieldCollection
+                myArrayField    ,@RpsField
+                myConfig        ,RpsConfig
+            endrecord
+        proc
+            init local_data
+            str = myStructure.Name
+            myFields = new RpsFieldCollection()
+            try
+            begin
+                data ms_info, s_info
+
+                ;;Set the current structure and get structure information
+                xcall dd_struct(RpsControl,DDS_INFO,str,^a(ms_info))
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get information for repository structure "+str)
+
+                ;;Do we have any fields to load?
+                if (ms_info.si_childct)
+                begin
+                    ;;Size the field names array and get field names
+                    MemHandle = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*ms_info.si_childct)
+                    xcall dd_field(RpsControl,DDF_SLIST,ms_info.si_childct,^m(rpsIdentifier,MemHandle))
+                    if (RpsControl.error)
+                        throw new RpsFieldException("Failed to get field names for repository structure "+str)
+
+                    ;;Add fields to the collection
+                    for ix from 1 thru ms_info.si_childct
+                    begin
+                        data mf_info ,f_info
+
+                        myField = LoadCurrentStructureField(^m(rpsIdentifier[ix],MemHandle))
+                        fieldOffset = myField.StartPosition-1
+                        mf_info = myField.FieldData
+
+                        ;;Is this field a group?
+                        using mf_info.fi_group select
+                        (F_GROUPOVRFLD),
+                        begin
+                            ;; group overlay field
+                            if (Config.NoOverlays == false)
+                                goto processGroup
+                        end
+                        (F_GROUPFLD),
+                        begin
+                            ;; group field
+processGroup,
+                            if (Config.ExpandGroups) then
+                            begin
+                                if (mf_info.fi_struct) then
+                                begin
+                                    ;;implicit group
+                                    data implicitGroupStructure, a30
+
+                                    xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_struct,implicitGroupStructure)
+                                    if (RpsControl.error)
+                                        throw new RpsGroupException("Failed to get field names for implicit group "+implicitGroupStructure)
+
+                                    data groupStruct ,@RpsStructure
+                                    data groupField ,@RpsField
+
+                                    groupStruct = LoadStructure(implicitGroupStructure,myConfig)
+                                    foreach groupField in groupStruct.Fields
+                                    begin
+                                        myArrayFields = new RpsFieldCollection(groupField, Config.ExpandArrays)
+                                        foreach myArrayField in myArrayFields
+                                        begin
+                                            myArrayField.StartPosition += fieldOffset
+                                            myFields.Add(myArrayField)
+                                        end
+                                    end
+                                    nop
+                                end
+                                else
+                                begin
+                                    ;;explicit group
+                                    data explicitGroupField ,a30 ,myField.Name
+
+                                    ;data ms_info2, s_info
+                                    ;xcall dd_struct(RpsControl, DDS_INFO, str, ms_info2)
+                                    ;if (RpsControl.error)
+                                    ;    throw new RpsGroupException("Failed to get information for structure "+str)
+                                    ;data mf_info2, f_info
+                                    ;xcall dd_field(RpsControl,DDF_INFO,explicitGroupField,^a(mf_info2))
+                                    ;if (RpsControl.error)
+                                    ;    throw new RpsGroupException("Failed to get information for group field "+explicitGroupField)
+
+                                    xcall dd_field(RpsControl,DDF_GROUP,explicitGroupField)
+                                    if (RpsControl.error)
+                                        throw new RpsGroupException("Failed to set field context to group "+explicitGroupField)
+
+                                    ;;Size the field names array and get field names
+                                    MemHandle2 = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*mf_info.fi_mbrct)
+                                    xcall dd_field(RpsControl,DDF_SLIST,mf_info.fi_mbrct,^m(rpsIdentifier,MemHandle2))
+                                    if (RpsControl.error)
+                                        throw new RpsGroupException("Failed to get field names for group "+explicitGroupField)
+
+                                    data groupField ,@RpsField
+                                    data ix2 ,int
+
+                                    ;;Add fields to the collection
+                                    for ix2 from 1 thru mf_info.fi_mbrct
+                                    begin
+                                        groupField = LoadCurrentStructureField(^m(rpsIdentifier[ix2],MemHandle2))
+                                        myArrayFields = new RpsFieldCollection(groupField, Config.ExpandArrays)
+                                        foreach myArrayField in myArrayFields
+                                        begin
+                                            myArrayField.StartPosition += fieldOffset
+                                            myFields.Add(myArrayField)
+                                        end
+                                    end
+
+                                    if (MemHandle2)
+                                        MemHandle2 = %mem_proc(DM_FREE,MemHandle2)
+
+                                    ;;Reset field context
+                                    xcall dd_field(RpsControl,DDF_ENDGROUP)
+                                    if (RpsControl.error)
+                                        throw new RpsGroupException("Failed to reset field context from group "+explicitGroupField)
+                                end
+                                nop
+                            end
+                            else
+                            begin
+                                ;not expanding group
+                                myArrayFields = new RpsFieldCollection(myField, Config.ExpandArrays)
+                                foreach myArrayField in myArrayFields
+                                begin
+                                    myFields.Add(myArrayField)
+                                    fieldOffset += myField.Size
+                                end
+                                nop
+                            end
+                        end
+                        (),
+                        begin
+                            ;; normal field
+                            myArrayFields = new RpsFieldCollection(myField, Config.ExpandArrays)
+                            foreach myArrayField in myArrayFields
+                            begin
+                                myFields.Add(myArrayField)
+                                fieldOffset += myField.Size
+                            end
+                            nop
+                        end
+                        endusing
+                    end
+                end
+            end
+            finally
+            begin
+                ;;Free field names array
+                if (MemHandle)
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+            end
+            endtry
+
+            if (Config.NoOverlays)
+                RemoveOverlays(myFields)
+            if (Config.NoExclDBL)
+                RemoveExcludedByLanguage(myFields)
+            if (Config.NoExclDTK)
+                RemoveExcludedByToolkit(myFields)
+            if (Config.NoExclRPT)
+                RemoveExcludedByReportWriter(myFields)
+            if (Config.NoExclWEB)
+                RemoveExcludedByWeb(myFields)
+
+            mreturn myFields
+        endmethod
+
+        ;;Remove overlay fields from the field collection
+        public method RemoveOverlays, void
+        required inout  myFields    ,@RpsFieldCollection
+        endparams
+        proc
+            data index, int, 0
+            repeat
+            begin
+                if (index<=(myFields.Count-1)) then
+                begin
+                    if (myFields[index].OverlaysField) then
+                        myFields.RemoveAt(index)
+                    else
+                        index+=1
+                end
+                else
+                    exitloop
+            end
+        endmethod
+
+        ;;Remove fields marked as "Excluded by Language" from the collection
+        public method RemoveExcludedByLanguage, void
+        required inout  myFields    ,@RpsFieldCollection
+        endparams
+        proc
+            data index, int, 0
+            repeat
+            begin
+                if (index<=(myFields.Count-1)) then
+                begin
+                    if (myFields[index].ExcludedByLanguage) then
+                        myFields.RemoveAt(index)
+                    else
+                        index+=1
+                end
+                else
+                    exitloop
+            end
+        endmethod
+
+        ;;Remove fields marked as "Excluded by Toolkit" from the collection
+        public method RemoveExcludedByToolkit, void
+        required inout  myFields    ,@RpsFieldCollection
+        endparams
+        proc
+            data index, int, 0
+            repeat
+            begin
+                if (index<=(myFields.Count-1)) then
+                begin
+                    if (myFields[index].ExcludedByToolkit) then
+                        myFields.RemoveAt(index)
+                    else
+                        index+=1
+                end
+                else
+                    exitloop
+            end
+        endmethod
+
+        ;;Remove fields marked as "Excluded by ReportWriter" from the collection
+        public method RemoveExcludedByReportWriter, void
+        required inout  myFields    ,@RpsFieldCollection
+        endparams
+        proc
+            data index, int, 0
+            repeat
+            begin
+                if (index<=(myFields.Count-1)) then
+                begin
+                    if (myFields[index].ExcludedByReportWriter) then
+                        myFields.RemoveAt(index)
+                    else
+                        index+=1
+                end
+                else
+                    exitloop
+            end
+        endmethod
+
+        ;;Remove fields marked as "Excluded by Web" from the collection
+        public method RemoveExcludedByWeb, void
+        required inout  myFields    ,@RpsFieldCollection
+        endparams
+        proc
+            data index, int, 0
+            repeat
+            begin
+                if (index<=(myFields.Count-1)) then
+                begin
+                    if (myFields[index].ExcludedByWeb) then
+                        myFields.RemoveAt(index)
+                    else
+                        index+=1
+                end
+                else
+                    exitloop
+            end
+        endmethod
+
+        ;;---------------------------------------------------------------------
+
+        private method LoadCurrentStructureField ,@RpsField
+            required in FieldName, String
+            endparams
+            record
+                myField ,@RpsField
+            endrecord
+        proc
+            data mf_info ,f_info
+
+            myField = new RpsField()
+
+            ;;Record the fields actual name
+            data actualFieldName = FieldName.Trim().ToUpper()
+
+            ;;Save the structure name
+            data StructureName ,string ,%atrim(RpsControl.sname)
+
+            ;;Load the field information structure
+            xcall dd_field(RpsControl,DDF_INFO,actualFieldName,^a(mf_info))
+            if (RpsControl.error)
+                throw new RpsFieldException("Failed to get repository information for structure " + StructureName +  " field " + actualFieldName)
+
+            myField.Info = mf_info
+
+            ;;Load the fields alternate name
+            if (mf_info.fi_altnm) then
+            begin
+                data tmpalternateName, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_altnm,tmpAlternateName)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get alternate name for repository field "+actualFieldName)
+                myField.AlternateName = %atrim(tmpalternateName)
+            end
+            else
+            begin
+                myField.AlternateName = actualFieldName
+            end
+
+            ;;Save the field name
+            if (Config.AlternateNames) then
+                myField.Name = myField.AlternateName
+            else
+                myField.Name = actualFieldName
+
+            ;;Load extended data
+
+            myField.ArrayDimension = new int[4]
+            myField.ArrayDimension[1] = mf_info.fi_dim[1]
+            myField.ArrayDimension[2] = mf_info.fi_dim[2]
+            myField.ArrayDimension[3] = mf_info.fi_dim[3]
+            myField.ArrayDimension[4] = mf_info.fi_dim[4]
+
+            ;;Load description
+            if (mf_info.fi_desc)
+            begin
+                data tmpDescription, a40
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_desc,tmpDescription)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get description for repository field "+actualFieldName)
+                myField.Description = %atrim(tmpDescription)
+            end
+
+            ;;Load long description
+            if (mf_info.fi_ldesc)
+            begin
+                data tmpLongDescription, a1800
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_ldesc,tmpLongDescription)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get long description for repository field "+actualFieldName)
+                myField.LongDescription = %atrim(tmpLongDescription)
+            end
+
+            ;;Load user defined field type
+            if (mf_info.fi_usrtyp)
+            begin
+                data tmpUserFieldType, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_usrtyp,tmpUserFieldType)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get user defined type for repository field "+actualFieldName)
+                myField.UserFieldType = %atrim(tmpUserFieldType)
+            end
+
+            ;;Load report heading
+            if (mf_info.fi_heading)
+            begin
+                data tmpReportHeading, a40
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_heading,tmpReportHeading)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get report heading for repository field "+actualFieldName)
+                myField.ReportHeading = %atrim(tmpReportHeading)
+            end
+
+            ;;Load prompt
+            if (mf_info.fi_prompt)
+            begin
+                data tmpPrompt, a80
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_prompt,tmpPrompt)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get prompt for repository field "+actualFieldName)
+                myField.Prompt = %atrim(tmpPrompt)
+            end
+
+            ;;Load help identifier
+            if (mf_info.fi_help)
+            begin
+                data tmpHelpIdentifier, a80
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_help,tmpHelpIdentifier)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get help identifier for repository field "+actualFieldName)
+                myField.HelpIdentifier = %atrim(tmpHelpIdentifier)
+            end
+
+            ;;Load information line text
+            if (mf_info.fi_infoln)
+            begin
+                data tmpInfoLineText, a80
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_infoln,tmpInfoLineText)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get information line text for repository field "+actualFieldName)
+                myField.InfoLineText = tmpInfoLineText
+            end
+
+            ;;Load user text string
+            if (mf_info.fi_utext)
+            begin
+                data tmpUserText, a80
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_utext,tmpUserText)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get user text for repository field "+actualFieldName)
+                myField.UserText = %atrim(tmpUserText)
+            end
+
+            ;;Load field font
+            if (mf_info.fi_font)
+            begin
+                data tmpFieldFont, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_font,tmpFieldFont)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get field font for repository field "+actualFieldName)
+                myField.FieldFont = %atrim(tmpFieldFont)
+            end
+
+            ;;Load prompt font
+            if (mf_info.fi_prmptfont)
+            begin
+                data tmpPromptFont, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_prmptfont,tmpPromptFont)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get prompt font for repository field "+actualFieldName)
+                myField.PromptFont = %atrim(tmpPromptFont)
+            end
+
+            ;;Load default value
+            if (mf_info.fi_def)
+            begin
+                data tmpDefaultValue, a80
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_def,tmpDefaultValue)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get default value for repository field "+actualFieldName)
+                myField.DefaultValue = %atrim(tmpDefaultValue)
+            end
+
+            ;;Load arrive method
+            if (mf_info.fi_arrivemeth)
+            begin
+                data tmpArriveMethod, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_arrivemeth,tmpArriveMethod)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get arrive method for repository field "+actualFieldName)
+                myField.ArriveMethod = %atrim(tmpArriveMethod)
+            end
+
+            ;;Load leave method
+            if (mf_info.fi_leavemeth)
+            begin
+                data tmpLeaveMethod, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_leavemeth,tmpLeaveMethod)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get leave method for repository field "+actualFieldName)
+                myField.LeaveMethod = %atrim(tmpLeaveMethod)
+            end
+
+            ;;Load drill method
+            if (mf_info.fi_drillmeth)
+            begin
+                data tmpDrillMethod, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_drillmeth,tmpDrillMethod)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get drill method for repository field "+actualFieldName)
+                myField.DrillMethod = %atrim(tmpDrillMethod)
+            end
+
+            ;;Load hyperlink method
+            if (mf_info.fi_hypermeth)
+            begin
+                data tmpHyperlinkMethod, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_hypermeth,tmpHyperlinkMethod)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get hyperlink method for repository field "+actualFieldName)
+                myField.HyperlinkMethod = %atrim(tmpHyperlinkMethod)
+            end
+
+            ;;Load change method
+            if (mf_info.fi_changemeth)
+            begin
+                data tmpChangeMethod, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_changemeth,tmpChangeMethod)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get change method for repository field "+actualFieldName)
+                myField.ChangeMethod = %atrim(tmpChangeMethod)
+            end
+
+            ;;Load display format method
+            if (mf_info.fi_dispmeth)
+            begin
+                data tmpDisplayMethod, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_dispmeth,tmpDisplayMethod)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get display method for repository field "+actualFieldName)
+                myField.DisplayMethod = %atrim(tmpDisplayMethod)
+            end
+
+            ;;Load edit format method
+            if (mf_info.fi_editfmtmeth)
+            begin
+                data tmpEditFormatMethod, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_editfmtmeth,tmpEditFormatMethod)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get edit format method for repository field "+actualFieldName)
+                myField.EditFormatMethod = %atrim(tmpEditFormatMethod)
+            end
+
+            ;;Load allowed value list (@ArrayList)
+            if (mf_info.fi_alwlst && mf_info.fi_alwct)
+            begin
+                data ListData, fti_entlst
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_alwlst,^a(ListData))
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get allow list entries for repository field "+actualFieldName)
+                data idx, int
+                for idx from 1 thru mf_info.fi_alwct
+                    myField.AllowList.Add((@a)ListData.fti_entlstary[idx])
+            end
+
+            ;;Load valid selections
+            if (mf_info.fi_sellist && mf_info.fi_selct)
+            begin
+                data ListData, fti_entlst
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_sellist,^a(ListData))
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get allow list entries for repository field "+actualFieldName)
+                data idx, int
+                for idx from 1 thru mf_info.fi_selct
+                    myField.SelectionList.Add((String)%atrim(ListData.fti_entlstary[idx]))
+            end
+
+            ;;Load numeric range values (fti_range)
+            if (mf_info.fi_range)
+            begin
+                data mfti_range, fti_range
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_range,^a(mfti_range))
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get ranges for repository field "+actualFieldName)
+                myField.NumericRangeMinimum = mfti_range.fti_rgmin
+                myField.NumericRangeMaximum = mfti_range.fti_rgmax
+            end
+
+            ;;Load Toolkit enumeration data (fti_enum)
+            if (mf_info.fi_enum)
+            begin
+                data mfti_enum, fti_enum
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_enum,^a(mfti_enum))
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get emumeration data for repository field "+actualFieldName)
+                myField.EnumeratedBaseValue = mfti_enum.fti_enmbase
+                myField.EnumeratedDisplayLength = mfti_enum.fti_enmlen
+                myField.EnumeratedStepValue = mfti_enum.fti_enmstep
+            end
+
+            ;;Load enumerated field name
+            if ((mf_info.fi_type == T_INT) && (mf_info.fi_class == C_ENUM) && (mf_info.fi_enmfld))
+            begin
+                data tmpEnumName, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_enmfld,tmpEnumName)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get emumeration name for repository field "+actualFieldName)
+                myField.EnumName = %atrim(tmpEnumName)
+            end
+
+            ;; Load display format string
+
+            if (mf_info.fi_fmt)
+            begin
+                ;;Is the format defined in the structure?
+                data formatType, a1
+                data formatString, a30
+                xcall dd_format(RpsControl,DDM_SINFO,mf_info.fi_fmt,formatType,formatString)
+
+                if (!RpsControl.error) then
+                    myField.FormatString = %atrim(formatString)
+                else
+                begin
+                    ;;Maybe it's a "global" or "pre-defined" format?
+                    xcall dd_format(RpsControl,DDM_INFO,mf_info.fi_fmt,formatType,formatString)
+                    if (!RpsControl.error)
+                        myField.FormatString = %atrim(formatString)
+                end
+            end
+
+            ;;Load the fields coerced type
+            using mf_info.fi_type select
+            (T_DEC),
+            begin
+                using mf_info.fi_class select
+                (C_YYMMDD,C_YYYYMMDD,C_YYJJJ,C_YYYYJJJ,C_YYPP,C_YYYYPP,C_HHMMSS,C_HHMM),
+                begin
+                    using mf_info.fi_coertype select
+                    (CT_DATETIME),
+                        myField.CoercedType = RpsFieldCoercedType.CtNone
+                    (CT_NULLDATETIME),
+                        myField.CoercedType = RpsFieldCoercedType.CtNullDateTime
+                    endusing
+                end
+                (),
+                begin
+                    if (mf_info.fi_prec) then
+                    begin
+                        using mf_info.fi_coertype select
+                        (CT_DECIMAL),
+                            myField.CoercedType = RpsFieldCoercedType.CtNone
+                        (CT_DOUBLE),
+                            myField.CoercedType = RpsFieldCoercedType.CtDouble
+                        (CT_FLOAT),
+                            myField.CoercedType = RpsFieldCoercedType.CtFloat
+                        endusing
+                    end
+                    else
+                    begin
+                        using mf_info.fi_coertype select
+                        (CT_DEFAULT),
+                            myField.CoercedType = RpsFieldCoercedType.CtNone
+                        (CT_BYTE),
+                            myField.CoercedType = RpsFieldCoercedType.CtByte
+                        (CT_SHORT),
+                            myField.CoercedType = RpsFieldCoercedType.CtShort
+                        (CT_INT),
+                            myField.CoercedType = RpsFieldCoercedType.CtInt
+                        (CT_LONG),
+                            myField.CoercedType = RpsFieldCoercedType.CtLong
+                        (CT_SBYTE),
+                            myField.CoercedType = RpsFieldCoercedType.CtSbyte
+                        (CT_USHORT),
+                            myField.CoercedType = RpsFieldCoercedType.CtUshort
+                        (CT_UINT),
+                            myField.CoercedType = RpsFieldCoercedType.CtUint
+                        (CT_ULONG),
+                            myField.CoercedType = RpsFieldCoercedType.CtUlong
+                        (CT_BOOLEAN),
+                            myField.CoercedType = RpsFieldCoercedType.CtBoolean
+                        endusing
+                    end
+                end
+                endusing
+            end
+            (T_INT),
+            begin
+                using mf_info.fi_coertype select
+                (CT_DEFAULT),
+                    myField.CoercedType = RpsFieldCoercedType.CtNone
+                (CT_BYTE),
+                    myField.CoercedType = RpsFieldCoercedType.CtByte
+                (CT_SHORT),
+                    myField.CoercedType = RpsFieldCoercedType.CtShort
+                (CT_INT),
+                    myField.CoercedType = RpsFieldCoercedType.CtInt
+                (CT_LONG),
+                    myField.CoercedType = RpsFieldCoercedType.CtLong
+                (CT_SBYTE),
+                    myField.CoercedType = RpsFieldCoercedType.CtSbyte
+                (CT_USHORT),
+                    myField.CoercedType = RpsFieldCoercedType.CtUshort
+                (CT_UINT),
+                    myField.CoercedType = RpsFieldCoercedType.CtUint
+                (CT_ULONG),
+                    myField.CoercedType = RpsFieldCoercedType.CtUlong
+                (CT_BOOLEAN),
+                    myField.CoercedType = RpsFieldCoercedType.CtBoolean
+                endusing
+            end
+            (),
+                myField.CoercedType = RpsFieldCoercedType.CtNone
+            endusing
+
+            ;; Things below here are unique to fields (not included in templates)
+
+            ;;Load a struct fields structure name
+            if ((mf_info.fi_type == "A") && (mf_info.fi_class == C_STRFLD))
+            begin
+                data tmpStructFieldStructure, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_strfld,tmpStructFieldStructure)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get structure for repository struct field "+actualFieldName)
+                myField.StructFieldStructure = %atrim(tmpStructFieldStructure)
+            end
+
+            ;;Load group structure name
+            if (mf_info.fi_struct)
+            begin
+                data tmpGroupStructure, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_struct,tmpGroupStructure)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get group structure for repository field "+actualFieldName)
+                myField.GroupStructure = %atrim(tmpGroupStructure)
+            end
+
+            ;;Load group member prefix
+            if (mf_info.fi_prefix)
+            begin
+                data tmpGroupMemberPrefix, a30
+                xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_prefix,tmpGroupMemberPrefix)
+                if (RpsControl.error)
+                    throw new RpsFieldException("Failed to get group prefix for repository field "+actualFieldName)
+                myField.GroupMemberPrefix = %atrim(tmpGroupMemberPrefix)
+            end
+
+            mreturn myField
+        endmethod
+
+        private method LoadStructureTags, @RpsTagCollection
+            required in myStructure, @RpsStructure
+            endparams
+            record local_data
+                MemHandle       ,D_HANDLE
+                ix              ,int
+            endrecord
+            record
+                myTags  ,@RpsTagCollection
+            endrecord
+        proc
+            init local_data
+            myTags = new RpsTagCollection()
+            try
+            begin
+                data ms_info ,s_info
+
+                ;;Set the current structure?
+                xcall dd_struct(RpsControl,DDS_INFO,myStructure.Name,ms_info)
+                if (RpsControl.error)
+                    throw new RpsTagException("Failed to get information for repository structure "+myStructure.Name)
+
+                ;;Do we have any tags to load?
+                if (ms_info.si_nmtags)
+                begin
+                    ;;Size the tag names array and get the tag names
+                    MemHandle = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*ms_info.si_nmtags)
+                    xcall dd_tag(RpsControl,DDTG_LIST,ms_info.si_nmtags,^m(rpsIdentifier,MemHandle))
+                    if (RpsControl.error)
+                        throw new RpsTagException("Failed to get tags for repository structure "+myStructure.Name)
+
+                    ;;Add tags to collection
+                    for ix from 1 thru ms_info.si_nmtags
+                        myTags.Add(LoadTag(myStructure,^m(rpsIdentifier[ix],MemHandle)))
+                end
+            end
+            finally
+            begin
+                ;;Free tag names array
+                if (MemHandle)
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+            end
+            endtry
+            mreturn myTags
+        endmethod
+
+        private method LoadTag ,@RpsTag
+            required in myStructure, @RpsStructure
+            required in TagName, String
+            endparams
+            record
+                myTag       ,@RpsTag
+            endrecord
+        proc
+            myTag = new RpsTag()
+
+            myTag.Name = TagName.Trim().ToUpper()
+            begin
+                data ms_info, s_info
+                xcall dd_struct(RpsControl,DDS_INFO,myStructure.Name,^a(ms_info))
+                if (RpsControl.error)
+                    throw new RpsTagException("Failed to set current repository structure to "+myStructure.Name)
+
+                begin
+                    data mtg_info ,tg_info
+
+                    ;;Load tag information
+                    xcall dd_tag(RpsControl,DDTG_INFO,myTag.Name,^a(mtg_info))
+                    if (RpsControl.error)
+                        throw new RpsTagException("Failed to load structure "+myStructure.Name+" tag "+TagName+".")
+
+                    myTag.Info = mtg_info
+                end
+            end
+            mreturn myTag
+        endmethod
+
+        private method LoadStructureFormats ,@RpsFormatCollection
+            required in myStructure, @RpsStructure
+            endparams
+            record local_data
+                MemHandle       ,D_HANDLE
+                ix              ,int
+            endrecord
+            record
+                myFormats       ,@RpsFormatCollection
+            endrecord
+        proc
+            myFormats = new RpsFormatCollection()
+            init local_data
+            try
+            begin
+                data ms_info, s_info
+                xcall dd_struct(RpsControl,DDS_INFO,myStructure.Name,ms_info)
+                if (RpsControl.error)
+                    throw new RpsFormatException("Failed to get information for repository structure "+myStructure.Name)
+
+                ;;Do we have any formats to load?
+                if (ms_info.si_nmfmts)
+                begin
+                    ;;Size the format names array and get the format names
+                    MemHandle = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*ms_info.si_nmfmts)
+                    xcall dd_format(RpsControl,DDM_LIST,ms_info.si_nmfmts,^m(rpsIdentifier,MemHandle))
+                    if (RpsControl.error)
+                        throw new RpsFormatException("Failed to get formats for repository structure "+myStructure.Name)
+
+                    ;;Add format names to the collection
+                    for ix from 1 thru ms_info.si_nmfmts
+                        myFormats.Add(LoadFormat(myStructure.Name,^m(rpsIdentifier[ix],MemHandle)))
+                end
+            end
+            finally
+            begin
+                ;;Free format names array
+                if (MemHandle)
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+            end
+            endtry
+
+            mreturn myFormats
+        endmethod
+
+        private method LoadFormat, @RpsFormat
+            required in StructureName, String
+            required in FormatName, String
+            endparams
+            record
+                myFormat    ,@RpsFormat
+            endrecord
+        proc
+            myFormat = new RpsFormat()
+            try
+            begin
+                data ms_info, s_info
+                data tmpFormatType, a1
+                data tmpFormatString, a30
+
+                ;;Set the current structure?
+                xcall dd_struct(Repository.RpsControl,DDS_INFO,StructureName,ms_info)
+                if (Repository.RpsControl.error)
+                    throw new RpsFormatException("Failed to set current repository structure to "+StructureName)
+
+                ;;Save the format name
+                myFormat.Name = FormatName.Trim().ToUpper()
+
+                ;;Load the format information
+                xcall dd_format(RpsControl,DDM_SINFO,myFormat.Name,tmpFormatType,tmpFormatString)
+                if (RpsControl.error)
+                    throw new RpsFormatException("Failed to get repository structure format "+StructureName+"."+FormatName)
+
+                myFormat.FormatString = %atrim(tmpFormatString)
+
+                ;;Set the format type
+                using tmpFormatType select
+                ("A"),
+                    myFormat.FormatType = RpsFormatType.Alpha
+                ("N"),
+                    myFormat.FormatType = RpsFormatType.Numeric
+                endusing
+            end
+            catch (ex)
+            begin
+                throw new RpsFormatException("Unexected error while retrieving structure "+StructureName+" format "+FormatName)
+            end
+            endtry
+            mreturn myFormat
+        endmethod
+
+        private method LoadStructureKeys ,@RpsKeyCollection
+            required in myStructure, @RpsStructure
+            endparams
+            record local_data
+                MemHandle       ,D_HANDLE
+                ix              ,int
+            endrecord
+            record
+                myKeys          ,@RpsKeyCollection
+            endrecord
+        proc
+            myKeys = new RpsKeyCollection()
+            init local_data
+            try
+            begin
+                data ms_info, s_info
+                ;;Set the current structure?
+                xcall dd_struct(RpsControl,DDS_INFO,myStructure.Name,ms_info)
+                if (RpsControl.error)
+                    throw new RpsKeyException("Failed to get information for repository structure "+myStructure.Name)
+
+                ;;Do we have any keys to load?
+                if (ms_info.si_nmkeys)
+                begin
+                    ;;Size the key names array and get key names
+                    MemHandle = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*ms_info.si_nmkeys)
+                    xcall dd_key(RpsControl,DDK_SLIST,ms_info.si_nmkeys,^m(rpsIdentifier,MemHandle))
+                    if (RpsControl.error)
+                        throw new RpsKeyException("Failed to get key names for repository structure "+myStructure.Name)
+
+                    ;;Add keys to collection
+                    for ix from 1 thru ms_info.si_nmkeys
+                        myKeys.Add(LoadKey(myStructure.Name,^m(rpsIdentifier[ix],MemHandle)))
+                end
+            end
+            finally
+            begin
+                ;;Free key names array
+                if (MemHandle)
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+            end
+            endtry
+            mreturn myKeys
+        endmethod
+
+        private method LoadKey, @RpsKey
+            required in StructureName, String
+            required in KeyName, String
+            endparams
+            record
+                myKey       ,@RpsKey
+            endrecord
+        proc
+            myKey = new RpsKey()
+            begin
+                data ms_info, s_info
+                data mk_info, k_info
+
+                xcall dd_struct(RpsControl,DDS_INFO,StructureName,^a(ms_info))
+                if (RpsControl.error)
+                    throw new RpsKeyException("Failed to set current repository structure to "+StructureName)
+
+                ;;Get key information record
+                xcall dd_key(RpsControl,DDK_INFO,KeyName,^a(mk_info))
+                if (RpsControl.error)
+                    throw new RpsKeyException("Failed to get key information for repository key "+StructureName+"."+KeyName)
+
+                ;;If no key density is specified then default to 50%
+                if (!mk_info.ki_density)
+                    mk_info.ki_density = 50
+
+                myKey.Info = mk_info
+
+                ;;Get key description
+                if (mk_info.ki_desc) then
+                begin
+                    data tmpDescription, a40
+                    xcall dd_key(RpsControl,DDK_TEXT,mk_info.ki_desc,tmpDescription)
+                    if (RpsControl.error)
+                        throw new RpsKeyException("Failed to get description repository key "+StructureName+"."+KeyName)
+
+                    myKey.Description = %atrim(tmpDescription)
+                end
+                else
+                    myKey.Description = ""
+
+                ;;Get null value string
+                if (mk_info.ki_nullval) then
+                begin
+                    data tmpNullValue, a255
+                    xcall dd_key(RpsControl,DDK_TEXT,mk_info.ki_nullval,tmpNullValue)
+                    if (RpsControl.error)
+                        throw new RpsKeyException("Failed to get null key string for repository key "+StructureName+"."+KeyName)
+
+                    myKey.NullKeyValue = %atrim(tmpNullValue)
+                end
+                else
+                    myKey.NullKeyValue = ""
+
+                ;;Load the key segments collection
+                myKey.Segments = LoadKeySegments(mk_info)
+            end
+            mreturn myKey
+        endmethod
+
+        private method LoadKeySegments, @RpsKeySegmentCollection
+            required in KeyInfo, k_info
+            endparams
+            record
+                ix, int
+            endrecord
+            record
+                myKeySegments ,@RpsKeySegmentCollection
+            endrecord
+        proc
+            myKeySegments = new RpsKeySegmentCollection()
+            for ix from 1 thru KeyInfo.ki_nmseg
+            begin
+                data seg, @RpsKeySegment
+                seg = RpsKeySegment.LoadKeySegment(
+                &    KeyInfo.ki_segtyp[ix],
+                &    KeyInfo.ki_segpos[ix],
+                &    KeyInfo.ki_seglen[ix],
+                &    KeyInfo.ki_fldnam[ix],
+                &    KeyInfo.ki_strnam[ix],
+                &    KeyInfo.ki_litval[ix],
+                &    KeyInfo.ki_segdtyp[ix],
+                &    KeyInfo.ki_segord[ix])
+                myKeySegments.Add(seg)
+            end
+            mreturn myKeySegments
+        endmethod
+
+        private method LoadStructureRelations, @RpsRelationCollection
+            required in myStructure, @RpsStructure
+            endparams
+            record local_data
+                MemHandle       ,D_HANDLE
+                ix              ,int
+            endrecord
+            record
+                myRelations     ,@RpsRelationCollection
+            endrecord
+        proc
+            myRelations = new RpsRelationCollection()
+            init local_data
+            try
+            begin
+                data ms_info, s_info
+                xcall dd_struct(RpsControl,DDS_INFO,myStructure.Name,^a(ms_info))
+                if (RpsControl.error)
+                    throw new RpsRelationException("Failed to get information for repository structure "+myStructure.Name)
+
+                ;;Do we have any relations to load?
+                if (ms_info.si_nmrels)
+                begin
+                    ;;Size the relation names array and get the relation names
+                    MemHandle = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*ms_info.si_nmrels)
+                    xcall dd_relation(RpsControl,DDR_LIST,ms_info.si_nmrels,^m(rpsIdentifier,MemHandle))
+                    if (RpsControl.error)
+                        throw new RpsRelationException("Failed to get relation names for repository structure "+myStructure.Name)
+
+                    ;;Add relation names to the collection
+                    for ix from 1 thru ms_info.si_nmrels
+                        myRelations.Add(LoadRelation(myStructure.Name,^m(rpsIdentifier[ix],MemHandle)))
+                end
+            end
+            finally
+            begin
+                ;;Free format names array
+                if (MemHandle)
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+            end
+            endtry
+            mreturn myRelations
+        endmethod
+
+        private method LoadRelation, @RpsRelation
+            required in StructureName, String
+            required in RelationName, String
+            endparams
+            record
+                myRelation ,@RpsRelation
+            endrecord
+        proc
+            myRelation = new RpsRelation()
+
+            ;;Save the structure and relation names
+            myRelation.FromStructure = StructureName.Trim().ToUpper()
+            myRelation.Name = RelationName.Trim().ToUpper()
+
+            data ms_info, s_info
+            data fromKey, a30
+            data toStructure, a30
+            data toKey, a30
+
+            xcall dd_struct(RpsControl,DDS_INFO,myRelation.FromStructure,ms_info)
+            if (RpsControl.error)
+                throw new RpsRelationException("Failed to set current repository structure to "+myRelation.FromStructure)
+
+            ;;Load the relation information
+            xcall dd_relation(RpsControl,DDR_INFO,myRelation.Name,fromKey,toStructure,toKey)
+            if (RpsControl.error)
+                throw new RpsRelationException("Failed to get information for repository relation "+myRelation.FromStructure+"."+myRelation.Name)
+
+            myRelation.FromKey = %atrim(fromKey)
+            myRelation.ToStructure = %atrim(toStructure)
+            myRelation.ToKey = %atrim(toKey)
+
+            mreturn myRelation
+        endmethod
+
+        private method LoadStructureEnumerations, @RpsEnumCollection
+            required in myStructure, @RpsStructure
+            endparams
+            record
+                ix          ,int
+                myConfig    ,RpsConfig
+                str         ,@RpsStructure
+                myEnums     ,@RpsEnumCollection
+            endrecord
+        proc
+            str = LoadStructure(myStructure.Name,myConfig)
+            for ix from 0 thru str.Fields.Count-1
+            begin
+                if (str.Fields[ix].EnumName)
+                begin
+                    data enm, @RpsEnum
+                    data done, boolean, false
+
+                    ;;Look for the enum in our existing collection
+                    foreach enm in myEnums
+                    begin
+                        if (enm.Name==str.Fields[ix].EnumName)
+                        begin
+                            done = true
+                            exitloop
+                        end
+                    end
+                    ;;Skip it if we already have it
+                    if (done)
+                        nextloop
+
+                    ;;Add to collection
+                    myEnums.Add(new RpsEnum(str.Fields[ix].EnumName))
+                end
+            end
+            str = ^null
+            mreturn myEnums
+        endmethod
+
+        private method LoadEnum, @RpsEnum
+            required in EnumName, String
+            endparams
+            record
+                myEnum ,@RpsEnum
+            endrecord
+        proc
+            myEnum = new RpsEnum(EnumName.Trim().ToUpper())
+
+            data me_info, e_info
+
+            ;;Load enum information
+            xcall dd_enum(RpsControl,DDE_INFO,myEnum.Name,^a(me_info))
+            if (RpsControl.error)
+                throw new RpsEnumException("Failed to get information for repository enumeration "+myEnum.Name)
+
+            ;;Load the enums text-based attributes
+
+            ;;Description
+            if (me_info.ei_desc) then
+            begin
+                data tmpDescription, a40
+                xcall dd_enum(RpsControl,DDE_TEXT,me_info.ei_desc,tmpDescription)
+                if (RpsControl.error)
+                    throw new RpsEnumException("Failed to get description for repository enumeration "+myEnum.Name)
+
+                myEnum.Description = %atrim(tmpDescription)
+            end
+            else
+                myEnum.Description = ""
+
+            ;;Long description
+            if (me_info.ei_ldesc) then
+            begin
+                data tmpLongDescription, a1800
+                xcall dd_enum(RpsControl,DDE_TEXT,me_info.ei_ldesc,tmpLongDescription)
+                if (RpsControl.error)
+                    throw new RpsEnumException("Failed to get long description for repository enumeration "+myEnum.Name)
+
+                myEnum.LongDescription = tmpLongDescription
+            end
+            else
+                myEnum.LongDescription = ""
+            mreturn myEnum
+        endmethod
+
+        private method LoadEnumMembers, @RpsEnumMemberCollection
+            required in EnumName, String
+            endparams
+            record local_data
+                MemHandleName   ,int
+                MemHandleValue  ,int
+                ix              ,int
+            endrecord
+            structure strEnumValue
+                ,a11
+            endstructure
+            record
+                Members         ,@RpsEnumMemberCollection
+            endrecord
+        proc
+            Members = new RpsEnumMemberCollection()
+            init local_data
+            try
+            begin
+                data me_info, e_info
+                xcall dd_enum(RpsControl,DDE_INFO,EnumName,^a(me_info))
+                if (RpsControl.error)
+                    throw new RpsEnumException("Failed to get information for repository enumeration "+EnumName)
+
+                ;Do we have any members to load?
+                if (me_info.ei_nmmbrs)
+                begin
+                    ;Size the member names and values arrays and get the data
+                    MemHandleName = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*me_info.ei_nmmbrs)
+                    MemHandleValue = %mem_proc(DM_ALLOC,^size(strEnumValue)*me_info.ei_nmmbrs)
+                    xcall dd_enum(RpsControl,DDE_MBRS,me_info.ei_nmmbrs,^m(rpsIdentifier,MemHandleName),^m(strEnumValue,MemHandleValue))
+                    if (RpsControl.error)
+                        throw new RpsEnumException("Failed to get members for repository enumeration "+EnumName)
+
+                    ;Add members to the collection
+                    for ix from 1 thru me_info.ei_nmmbrs
+                    begin
+                        data MemberName , a30
+                        data ExplicitValue, a11
+                        data ImplicitValue, a11, ""
+                        MemberName = ^m(rpsIdentifier[ix],MemHandleName)
+                        ExplicitValue = ^m(strEnumValue[ix],MemHandleValue)
+                        if (ExplicitValue) then
+                            ImplicitValue = ExplicitValue
+                        else
+                        begin
+                            ;;Figure out the implicit value for the new member
+                            if (Members.Count==0) then
+                                ImplicitValue = "0"
+                            else
+                            begin
+                                ;Workaround for bug in %integer with negative numbers in 9.2.1
+                                data tmpd, d18
+                                tmpd = Members[Members.Count-1].ImplicitValue
+                                ImplicitValue = tmpd + 1 [LEFT]
+                               ;ImplicitValue = %integer(((RpsEnumMember)mCollection[mCollection.Count]).ImplicitValue) + 1 [LEFT]
+                            end
+                        end
+                        Members.Add(new RpsEnumMember(EnumName,MemberName,ExplicitValue,ImplicitValue))
+                    end
+                end
+            end
+            finally
+            begin
+                ;Free arrays
+                if (MemHandleName)
+                    MemHandleName = %mem_proc(DM_FREE,MemHandleName)
+                if (MemHandleValue)
+                    MemHandleValue = %mem_proc(DM_FREE,MemHandleValue)
+            end
+            endtry
+            mreturn Members
+        endmethod
+
+.endregion
+
+    endclass
+
+endnamespace

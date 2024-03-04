@@ -1,0 +1,347 @@
+;;*****************************************************************************
+;;
+;; Title:       RpsStructure.dbl
+;;
+;; Type:        Class
+;;
+;; Description: Represents a single Repository structure definition
+;;
+;; Date:        2nd March 2024
+;;
+;; Author:      Steve Ives, Synergex Professional Services Group
+;;              http://www.synergex.com
+;;
+;;*****************************************************************************
+;;
+;; Copyright (c) 2024, Synergex International, Inc.
+;; All rights reserved.
+;;
+;; Redistribution and use in source and binary forms, with or without
+;; modification, are permitted provided that the following conditions are met:
+;;
+;; * Redistributions of source code must retain the above copyright notice,
+;;   this list of conditions and the following disclaimer.
+;;
+;; * Redistributions in binary form must reproduce the above copyright notice,
+;;   this list of conditions and the following disclaimer in the documentation
+;;   and/or other materials provided with the distribution.
+;;
+;; THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+;; AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+;; IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+;; ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+;; LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+;; CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+;; SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+;; INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+;; CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+;; ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+;; POSSIBILITY OF SUCH DAMAGE.
+;;
+;;*****************************************************************************
+
+import SynPSG.RepositoryAPI
+import Newtonsoft.Json
+import Newtonsoft.Json.Converters
+
+namespace SynPSG.RepositoryAPI
+
+    ;;; <summary>
+    ;;; Represents a repository STRUCTURE
+    ;;; </summary>
+    public class RpsStructure
+
+        public override method ToString, String
+            endparams
+        proc
+            mreturn string.Format("RpsStructure: {0}",mStructureName)
+        endmethod
+
+        ;; Structure attribute data
+        private ms_info          ,s_info
+
+        private mStructureName    ,String
+        private mDescription      ,String
+        private mLongDescription  ,String
+        private mUserText         ,String
+        private mFields           ,@RpsFieldCollection
+        private mKeys             ,@RpsKeyCollection
+        private mFiles            ,@RpsFileCollection
+        private mTags             ,@RpsTagCollection
+        private mFormats          ,@RpsFormatCollection
+        private mRelations        ,@RpsRelationCollection
+        private mEnums            ,@RpsEnumCollection
+
+        ;;; <summary>
+        ;;; Default constructor. Creates an empty structure.
+        ;;; </summary>
+        public method RpsStructure
+            endparams
+        proc
+            mStructureName = String.Empty
+            mDescription = String.Empty
+            mLongDescription = String.Empty
+            mUserText = String.Empty
+            ;mFields = new RpsFieldCollection()
+            ;mKeys = new RpsKeyCollection()
+            ;mFiles = new RpsFileCollection()
+            ;mTags = new RpsTagCollection()
+            ;mFormats = new RpsFormatCollection()
+            ;mRelations = new RpsRelationCollection()
+            ;mEnums = new RpsEnumCollection()
+
+            FileType = "USER DEFINED"
+            Length = 0
+            ChildCount = 0
+            TagType = RpsTagType.None
+            FirstFile = String.Empty
+            
+        endmethod
+
+        ;; Destructor
+        method ~RpsStructure
+        proc
+            clear mFields, mKeys, mFiles, mTags, mFormats, mRelations, mEnums
+        endmethod
+
+
+        ;;---------------------------------------------------------------------
+        ;; Public properties to expose the structures attributes
+
+        ;;; <summary>
+        ;;; Fields that belong to the structure
+        ;;; </summary>
+        public property Fields, @RpsFieldCollection
+            method get
+            proc
+                mreturn mFields
+            endmethod
+            method set
+            proc
+                mFields = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Keys that are defined in the structure
+        ;;; </summary>
+        public property Keys, @RpsKeyCollection
+            method get
+            proc
+                mreturn mKeys
+            endmethod
+            method set
+            proc
+                mKeys = value
+            endmethod
+        endproperty
+
+        {JsonIgnore}
+        ;;; <summary>
+        ;;; Files that the structure is assigned to
+        ;;; </summary>
+        public property Files, @RpsFileCollection
+            method get
+            proc
+                mreturn mFiles
+            endmethod
+            method set
+            proc
+                mFiles = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Tage that are defined in the structure
+        ;;; </summary>
+        public property Tags, @RpsTagCollection
+            method get
+            proc
+                mreturn mTags
+            endmethod
+            method set
+            proc
+                mTags = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Formats that are defined in the structure
+        ;;; </summary>
+        public property Formats, @RpsFormatCollection
+            method get
+            proc
+                mreturn mFormats
+            endmethod
+            method set
+            proc
+                mFormats = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Relationships to other structures
+        ;;; </summary>
+        public property Relations, @RpsRelationCollection
+            method get
+            proc
+                mreturn mRelations
+            endmethod
+            method set
+            proc
+                mRelations = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Enumerations that belong to the structure
+        ;;; </summary>
+        public property Enums, @RpsEnumCollection
+            method get
+            proc
+                mreturn mEnums
+            endmethod
+            method set
+            proc
+                mEnums = value
+            endmethod
+        endproperty
+
+
+        ;;; <summary>
+        ;;; Structure name
+        ;;; </summary>
+        public property Name, String
+            method get
+            proc
+                mreturn mStructureName
+            endmethod
+            method set
+            proc
+                mStructureName = value.Trim().ToUpper()
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Associated file type
+        ;;; </summary>
+        public property FileType, string
+            method get
+            proc
+                mreturn %atrim(ms_info.si_filtyp)
+            endmethod
+            method set
+            proc
+                ms_info.si_filtyp = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Description
+        ;;; </summary>
+        public property Description, String
+            method get
+            proc
+                mreturn mDescription
+            endmethod
+            method set
+            proc
+                mDescription = value.Trim()
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Long description
+        ;;; </summary>
+        public property LongDescription, String
+            method get
+            proc
+                mreturn mLongDescription
+            endmethod
+            method set
+            proc
+                mLongDescription = value.Trim()
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; User defined text
+        ;;; </summary>
+        public property UserText, String
+            method get
+            proc
+                mreturn mUserText
+            endmethod
+            method set
+            proc
+                mUserText = value.Trim()
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Record length
+        ;;; </summary>
+        public property Length, int
+            method get
+            proc
+                mreturn ms_info.si_recsz
+            endmethod
+            method set
+            proc
+                ms_info.si_recsz = value
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Number of top level fields or groups
+        ;;; </summary>
+        public property ChildCount, int
+            method get
+            proc
+                mreturn ms_info.si_childct
+            endmethod
+            method set
+            proc
+                ms_info.si_childct = value
+            endmethod
+        endproperty
+
+        {JsonConverter(^typeof(StringEnumConverter))}
+        ;;; <summary>
+        ;;; Tag type (if any)
+        ;;; </summary>
+        public property TagType, RpsTagType
+            method get
+            proc
+                mreturn (RpsTagType)integer(ms_info.si_tagtyp)
+            endmethod
+            method set
+            proc
+                ms_info.si_tagtyp = %integer(value)
+            endmethod
+        endproperty
+
+        {JsonIgnore}
+        ;;; <summary>
+        ;;; First (or only) file assigned to
+        ;;; </summary>
+        public property FirstFile, String
+            method get
+            proc
+                mreturn %atrim(ms_info.si_file)
+            endmethod
+            method set
+            proc
+                ms_info.si_file = value
+            endmethod
+        endproperty
+
+        public property Info, s_info
+            method set
+            proc
+                ms_info = value
+            endmethod
+        endproperty
+    endclass
+
+endnamespace
