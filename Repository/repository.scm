@@ -5,12 +5,21 @@
 ;                 : E:\DEV\fileConvert\rps\rpstext.ism
 ;                 : Version 12.3.1
 ;
-;  GENERATED      : 03-MAR-2024, 17:26:11
+;  GENERATED      : 04-MAR-2024, 10:53:09
 ;                 : Version 12.3.1
 ;  EXPORT OPTIONS : [ALL] 
  
  
-Structure CCCD   DBL ISAM
+Structure DDDDB   DBL ISAM
+   Description "dddd implicit group"
+ 
+Field IG1FLD1   Type ALPHA   Size 1
+ 
+Field IG1FLD2   Type ALPHA   Size 2
+ 
+Field IG1FLD3   Type ALPHA   Size 3
+ 
+Structure CCCCB   DBL ISAM
    Description "Explicit Group 2"
  
 Field BFIELD1   Type ALPHA   Size 1
@@ -39,7 +48,16 @@ Group BGROUP1   Type ALPHA
  
 Endgroup
  
-Structure AAAB   DBL ISAM
+Structure BBBBB   DBL ISAM
+   Description "BBBB implicit group"
+ 
+Field IG1FLD1   Type ALPHA   Size 1
+ 
+Field IG1FLD2   Type ALPHA   Size 2
+ 
+Field IG1FLD3   Type ALPHA   Size 3
+ 
+Structure AAAAB   DBL ISAM
    Description "Explicit Group"
  
 Field BFIELD1   Type ALPHA   Size 1
@@ -75,7 +93,7 @@ Structure AAAA   DBL ISAM
  
 Field AFIELD1   Type ALPHA   Size 1
  
-Group AEXPLGROUP   Type ALPHA   Size 2
+Group AEXPLGROUP   Type ALPHA   Size 2   Dimension 2
  
    Field AGRP1   Type ALPHA   Size 1
  
@@ -83,7 +101,26 @@ Group AEXPLGROUP   Type ALPHA   Size 2
  
 Endgroup
  
-Group AIMPLGROUP   Reference AAAB   Type ALPHA
+Group AIMPLGROUP   Reference AAAAB   Type ALPHA
+ 
+Structure BBBB   DBL ISAM
+   Description "small struture test"
+ 
+Field FIELD1   Type ALPHA   Size 1
+ 
+Group EXPLGROUP1   Type ALPHA   Dimension 2
+ 
+   Field EG1FLD1   Type ALPHA   Size 1
+ 
+   Field EG1FLD2   Type DECIMAL   Size 1
+ 
+Endgroup
+ 
+Field FIELD3   Type ALPHA   Size 3
+ 
+Group IMPLGROUP1   Reference BBBBB   Type ALPHA
+ 
+Field FIELD5   Type ALPHA   Size 5
  
 Structure CCCC   DBL ISAM
    Description "Structure 2"
@@ -98,13 +135,40 @@ Group AEXPLGROUP   Type ALPHA   Size 4
  
 Endgroup
  
-Group AIMPLGROUP   Reference CCCD   Type ALPHA
+Group AIMPLGROUP   Reference CCCCB   Type ALPHA
+ 
+Structure DDDD   DBL ISAM
+   Description "small struture test 2"
+ 
+Field FIELD1   Type ALPHA   Size 1
+ 
+Group EXPLGROUP1   Type ALPHA   Dimension 2
+ 
+   Field EG1FLD1   Type ALPHA   Size 1
+ 
+   Field EG1FLD2   Type DECIMAL   Size 1
+ 
+Endgroup
+ 
+Field FIELD3   Type ALPHA   Size 3
+ 
+Group IMPLGROUP1   Reference DDDDB   Type ALPHA
+ 
+Field FIELD5   Type ALPHA   Size 5
  
 File AAAA   DBL ISAM   "DAT:aaaa.ism"
    Description "Test file"
    Assign AAAA
  
+File BBBB   DBL ISAM   "DAT:bbbb.ism"
+   Description "Test file"
+   Assign BBBB
+ 
 File CCCC   DBL ISAM   "DAT:aaaa.ism"
    Description "Test file"
    Assign CCCC
+ 
+File DDDD   DBL ISAM   "DAT:bbbb.ism"
+   Description "Test file"
+   Assign DDDD
  

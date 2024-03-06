@@ -1130,8 +1130,9 @@ namespace SynPSG.RepositoryAPI
 .region "Structure methods"
 
         public method LoadStructure, @RpsStructure
-            required in aRpsStructureName, a
-            required in aWantItems      ,RpsConfig
+            required in aRpsStructureName   ,a
+            required in aWantItems          ,RpsConfig
+            optional in aGroupNamePrefix    ,a
             endparams
         proc
             data ms_info ,s_info
@@ -1149,15 +1150,13 @@ namespace SynPSG.RepositoryAPI
             begin
                 data myStructureFields ,@RpsFieldCollection
                 data myField ,@RpsField
-                myStructureFields = LoadStructureFields(cStructure)
+                myStructureFields = LoadStructureFields(cStructure,aGroupNamePrefix)
                 cStructure.Fields = new RpsFieldCollection()
                 foreach myField in myStructureFields
                     cStructure.Fields.Add(myField)
 
                 ;reset current structure info
                 cStructure.Name = aRpsStructureName
-
-                ;;cStructure.Fields = LoadStructureFields(cStructure)
             end
 
             cStructure.Info = ms_info
@@ -1200,7 +1199,7 @@ namespace SynPSG.RepositoryAPI
             ;begin
             ;    data myStructureFields ,@RpsFieldCollection
             ;    data myField ,@RpsField
-            ;    myStructureFields = LoadStructureFields(cStructure)
+            ;    myStructureFields = LoadStructureFields(cStructure,aGroupNamePrefix)
             ;    cStructure.Fields = new RpsFieldCollection()
             ;    foreach myField in myStructureFields
             ;        cStructure.Fields.Add(myField)
@@ -1230,30 +1229,30 @@ namespace SynPSG.RepositoryAPI
             mreturn cStructure
         endmethod
 
-        ;;---------------------------------------------------------------------
-
         ;;Stack of structure names used with nested implicit groups
         private previousStructures, @Stack<string>, new Stack<string>()
 
         ;;load fields for a structure or implicit group
         private method LoadStructureFields ,@RpsFieldCollection
-            required in myStructure, @RpsStructure
+            required in myStructure         ,@RpsStructure
+            optional in aGroupNamePrefix    ,a
+            endparams
             record
                 str                 ,String
                 myStructureFields   ,@RpsFieldCollection
                 ms_info             ,s_info
             endrecord
         proc
-            str = %atrimtostring(RpsControl.sname)
 
             ;;Preserve the name of the current (parent) structure
+            str = %atrimtostring(RpsControl.sname)
             previousStructures.Push(str)
             xcall dd_struct(RpsControl,DDS_INFO,str,ms_info)
             if (RpsControl.error)
-                throw new RpsStructureException("Failed to reset context to original structure  " + str)
+                throw new RpsStructureException("Failed to set context to structure  " + str)
 
             ;;Load the structure that defines the group
-            myStructureFields = LoadFields(myStructure)
+            myStructureFields = LoadFields(myStructure,aGroupNamePrefix)
 
             ;;Reset to the parent structure
             if (previousStructures.Count > 0)
@@ -1263,38 +1262,37 @@ namespace SynPSG.RepositoryAPI
                 if (RpsControl.error)
                     throw new RpsStructureException("Failed to reset context to original structure  " + str)
             end
+
             mreturn myStructureFields
         endmethod
 
+        ;;---------------------------------------------------------------------
+
         ;;Load fields (should only be called from LoadStructureFields)
         private method LoadFields, @RpsFieldCollection
-            required in myStructure, @RpsStructure
+            required in myStructure         ,@RpsStructure
+            optional in aGroupNamePrefix    ,a          ;group name prefix (for fully qualified field name)
+            endparams
             record local_data
                 MemHandle       ,D_HANDLE
-                MemHandle2      ,D_HANDLE
                 ix              ,int
-                fieldOffset     ,int
             endrecord
             record
-                str             ,string
                 myFields        ,@RpsFieldCollection
-                myField         ,@RpsField
                 myArrayFields   ,@RpsFieldCollection
                 myArrayField    ,@RpsField
-                myConfig        ,RpsConfig
             endrecord
         proc
             init local_data
-            str = myStructure.Name
             myFields = new RpsFieldCollection()
             try
             begin
                 data ms_info, s_info
 
                 ;;Set the current structure and get structure information
-                xcall dd_struct(RpsControl,DDS_INFO,str,^a(ms_info))
+                xcall dd_struct(RpsControl,DDS_INFO,myStructure.Name,^a(ms_info))
                 if (RpsControl.error)
-                    throw new RpsFieldException("Failed to get information for repository structure "+str)
+                    throw new RpsFieldException("Failed to get information for repository structure "+myStructure.Name)
 
                 ;;Do we have any fields to load?
                 if (ms_info.si_childct)
@@ -1303,128 +1301,14 @@ namespace SynPSG.RepositoryAPI
                     MemHandle = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*ms_info.si_childct)
                     xcall dd_field(RpsControl,DDF_SLIST,ms_info.si_childct,^m(rpsIdentifier,MemHandle))
                     if (RpsControl.error)
-                        throw new RpsFieldException("Failed to get field names for repository structure "+str)
+                        throw new RpsFieldException("Failed to get field names for repository structure "+myStructure.Name)
 
                     ;;Add fields to the collection
                     for ix from 1 thru ms_info.si_childct
                     begin
-                        data mf_info ,f_info
-
-                        myField = LoadCurrentStructureField(^m(rpsIdentifier[ix],MemHandle))
-                        fieldOffset = myField.StartPosition-1
-                        mf_info = myField.FieldData
-
-                        ;;Is this field a group?
-                        using mf_info.fi_group select
-                        (F_GROUPOVRFLD),
-                        begin
-                            ;; group overlay field
-                            if (Config.NoOverlays == false)
-                                goto processGroup
-                        end
-                        (F_GROUPFLD),
-                        begin
-                            ;; group field
-processGroup,
-                            if (Config.ExpandGroups) then
-                            begin
-                                if (mf_info.fi_struct) then
-                                begin
-                                    ;;implicit group
-                                    data implicitGroupStructure, a30
-
-                                    xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_struct,implicitGroupStructure)
-                                    if (RpsControl.error)
-                                        throw new RpsGroupException("Failed to get field names for implicit group "+implicitGroupStructure)
-
-                                    data groupStruct ,@RpsStructure
-                                    data groupField ,@RpsField
-
-                                    groupStruct = LoadStructure(implicitGroupStructure,myConfig)
-                                    foreach groupField in groupStruct.Fields
-                                    begin
-                                        myArrayFields = new RpsFieldCollection(groupField, Config.ExpandArrays)
-                                        foreach myArrayField in myArrayFields
-                                        begin
-                                            myArrayField.StartPosition += fieldOffset
-                                            myFields.Add(myArrayField)
-                                        end
-                                    end
-                                    nop
-                                end
-                                else
-                                begin
-                                    ;;explicit group
-                                    data explicitGroupField ,a30 ,myField.Name
-
-                                    ;data ms_info2, s_info
-                                    ;xcall dd_struct(RpsControl, DDS_INFO, str, ms_info2)
-                                    ;if (RpsControl.error)
-                                    ;    throw new RpsGroupException("Failed to get information for structure "+str)
-                                    ;data mf_info2, f_info
-                                    ;xcall dd_field(RpsControl,DDF_INFO,explicitGroupField,^a(mf_info2))
-                                    ;if (RpsControl.error)
-                                    ;    throw new RpsGroupException("Failed to get information for group field "+explicitGroupField)
-
-                                    xcall dd_field(RpsControl,DDF_GROUP,explicitGroupField)
-                                    if (RpsControl.error)
-                                        throw new RpsGroupException("Failed to set field context to group "+explicitGroupField)
-
-                                    ;;Size the field names array and get field names
-                                    MemHandle2 = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*mf_info.fi_mbrct)
-                                    xcall dd_field(RpsControl,DDF_SLIST,mf_info.fi_mbrct,^m(rpsIdentifier,MemHandle2))
-                                    if (RpsControl.error)
-                                        throw new RpsGroupException("Failed to get field names for group "+explicitGroupField)
-
-                                    data groupField ,@RpsField
-                                    data ix2 ,int
-
-                                    ;;Add fields to the collection
-                                    for ix2 from 1 thru mf_info.fi_mbrct
-                                    begin
-                                        groupField = LoadCurrentStructureField(^m(rpsIdentifier[ix2],MemHandle2))
-                                        myArrayFields = new RpsFieldCollection(groupField, Config.ExpandArrays)
-                                        foreach myArrayField in myArrayFields
-                                        begin
-                                            myArrayField.StartPosition += fieldOffset
-                                            myFields.Add(myArrayField)
-                                        end
-                                    end
-
-                                    if (MemHandle2)
-                                        MemHandle2 = %mem_proc(DM_FREE,MemHandle2)
-
-                                    ;;Reset field context
-                                    xcall dd_field(RpsControl,DDF_ENDGROUP)
-                                    if (RpsControl.error)
-                                        throw new RpsGroupException("Failed to reset field context from group "+explicitGroupField)
-                                end
-                                nop
-                            end
-                            else
-                            begin
-                                ;not expanding group
-                                myArrayFields = new RpsFieldCollection(myField, Config.ExpandArrays)
-                                foreach myArrayField in myArrayFields
-                                begin
-                                    myFields.Add(myArrayField)
-                                    fieldOffset += myField.Size
-                                end
-                                nop
-                            end
-                        end
-                        (),
-                        begin
-                            ;; normal field
-                            myArrayFields = new RpsFieldCollection(myField, Config.ExpandArrays)
-                            foreach myArrayField in myArrayFields
-                            begin
-                                myFields.Add(myArrayField)
-                                fieldOffset += myField.Size
-                            end
-                            nop
-                        end
-                        endusing
+                        data myField = LoadCurrentStructureField(^m(rpsIdentifier[ix],MemHandle))
+                        data fieldOffset ,int ,0
+                        LoadField(myFields,myField,aGroupNamePrefix,fieldOffset)
                     end
                 end
             end
@@ -1447,13 +1331,216 @@ processGroup,
             if (Config.NoExclWEB)
                 RemoveExcludedByWeb(myFields)
 
+            if (Config.LogLevel == 1)
+            begin   
+                foreach myArrayField in myFields
+                    RpsField.LogRpsField(myStructure,myArrayField)
+            end
+
             mreturn myFields
+        endmethod
+
+        private method LoadField ,void
+            required inout  myFields            ,@RpsFieldCollection
+            required in     myField             ,@RpsField
+            required in     aGroupNamePrefix          ,string
+            required inout  aFieldOffset        ,n
+            endparams
+
+        proc
+            data mf_info ,f_info ,myField.FieldData
+            data processingType ,d1 ,mf_info.fi_group
+            data fieldOffset ,int ,myField.StartPosition-1
+
+            using processingType select
+            (F_GROUPOVRFLD),
+            begin
+                ;; group overlay field
+                if (Config.NoOverlays == false)
+                begin
+                    processingType = F_GROUPFLD
+                    if (Config.ExpandGroups == false)
+                        processingType = F_NOGROUP
+                end
+            end
+            (F_GROUPFLD),
+            begin
+                ;; group field
+                if (Config.ExpandGroups == false)
+                    processingType = F_NOGROUP
+            end
+            endusing
+
+            using processingType select
+            (F_GROUPFLD),
+            begin ;expand group
+                data myArrayFields   ,@RpsFieldCollection
+                data myArrayField    ,@RpsField
+
+                myArrayFields = new RpsFieldCollection(myField, Config.ExpandArrays)
+                foreach myArrayField in myArrayFields
+                begin
+                    if (Config.ExpandGroupsKeepGroup)
+                        myFields.Add(myArrayField)
+
+                    LoadGroupFields(myFields,myArrayField,aGroupNamePrefix,fieldOffset)
+                end
+            end
+            (F_NOGROUP),
+            begin
+                ;; normal field / unexpanded group
+                data myArrayFields   ,@RpsFieldCollection
+                data myArrayField    ,@RpsField
+
+                myArrayFields = new RpsFieldCollection(myField, Config.ExpandArrays)
+                foreach myArrayField in myArrayFields
+                begin
+                    myFields.Add(myArrayField)
+                end
+            end
+            endusing
+
+            mreturn
+        endmethod
+
+        private method LoadGroupFields ,void
+            required inout  myFields            ,@RpsFieldCollection
+            required in     myField             ,@RpsField
+            required in     aGroupNamePrefix    ,string
+            required inout  fieldOffset         ,n
+            endparams
+
+        proc
+            data mf_info ,f_info ,myField.FieldData
+
+            data myGroupArrayFields   ,@RpsFieldCollection
+            data myGroupArrayField    ,@RpsField
+            myGroupArrayFields = new RpsFieldCollection(myField, Config.ExpandArrays)
+            foreach myGroupArrayField in myGroupArrayFields
+            begin
+                data fieldSize ,int ,myField.Size
+
+                data fullGroupName ,string
+
+                if (mf_info.fi_struct) then
+                begin
+                    ;;implicit group
+                    data implicitGroupStructure, a30
+                    xcall dd_field(RpsControl,DDF_TEXT,mf_info.fi_struct,implicitGroupStructure)
+                    if (RpsControl.error)
+                        throw new RpsGroupException("Failed to get implicit group structure name for field "+myField.Name)
+
+                    if (!implicitGroupStructure)
+                        throw new RpsGroupException("Got blank implicit group structure name for field "+myField.Name)
+
+                    myField.GroupStructure = %atrim(implicitGroupStructure)
+
+                    if (aGroupNamePrefix) then
+                        fullGroupName = %atrim(aGroupNamePrefix) + "." + myField.GroupStructure
+                    else
+                        fullGroupName = myField.GroupStructure
+
+                    ;;save structure context
+                    previousStructures.push(RpsControl.sname)
+
+                    ;;set structure context
+                    data ms_info ,s_info
+                    xcall dd_struct(RpsControl,DDS_INFO,myField.GroupStructure,ms_info)
+                    if (RpsControl.error)
+                        throw new RpsStructureException("Failed to set context to structure " + myField.GroupStructure)
+
+                    data groupStructure = new RpsStructure(myField.GroupStructure)
+                    data myGroupFields = LoadFields(groupStructure,aGroupNamePrefix)
+
+                    data groupField ,@RpsField
+                    foreach groupField in myGroupFields
+                    begin
+                        data myArrayField ,@RpsField
+
+                        data myArrayFields = new RpsFieldCollection(groupField, Config.ExpandArrays)
+                        foreach myArrayField in myArrayFields
+                        begin
+                            myArrayField.StartPosition += fieldOffset
+                            groupField.GroupName = fullGroupName
+                            myFields.Add(myArrayField)
+                        end
+                    end
+                                        
+                    ;;Reset structure context
+                    if (previousStructures.Count > 0)
+                    begin
+                        data prvstr ,string ,previousStructures.Pop()
+                        xcall dd_struct(RpsControl,DDS_INFO,prvstr,ms_info)
+                        if (RpsControl.error)
+                            throw new RpsStructureException("Failed to reset context to original structure  " + prvstr)
+                    end
+                end
+                else
+                begin
+                    ;;explicit group
+                    data explicitGroupField ,string ,myField.Name
+
+                    if (aGroupNamePrefix) then
+                        fullGroupName = %atrim(aGroupNamePrefix) + "." + myGroupArrayField.Name
+                    else
+                        fullGroupName = myGroupArrayField.Name
+
+                    ;data ms_info2, s_info
+                    ;xcall dd_struct(RpsControl, DDS_INFO, str, ms_info2)
+                    ;if (RpsControl.error)
+                    ;    throw new RpsGroupException("Failed to get information for structure "+str)
+                    ;data mf_info2, f_info
+                    ;xcall dd_field(RpsControl,DDF_INFO,explicitGroupField,^a(mf_info2))
+                    ;if (RpsControl.error)
+                    ;    throw new RpsGroupException("Failed to get information for group field "+explicitGroupField)
+
+                    xcall dd_field(RpsControl,DDF_GROUP,explicitGroupField)
+                    if (RpsControl.error)
+                        throw new RpsGroupException("Failed to set field context to group "+explicitGroupField)
+
+                    ;;Size the field names array and get field names
+                    data MemHandle2 ,D_HANDLE
+                    MemHandle2 = %mem_proc(DM_ALLOC,^size(rpsIdentifier)*mf_info.fi_mbrct)
+                    xcall dd_field(RpsControl,DDF_SLIST,mf_info.fi_mbrct,^m(rpsIdentifier,MemHandle2))
+                    if (RpsControl.error)
+                        throw new RpsGroupException("Failed to get field names for group "+explicitGroupField)
+
+                    ;;Add fields to the collection
+                    data ix2 ,int
+                    for ix2 from 1 thru mf_info.fi_mbrct
+                    begin
+                        data groupField = LoadCurrentStructureField(^m(rpsIdentifier[ix2],MemHandle2))
+                        groupField.GroupName = fullGroupName
+
+                        data myArrayField ,@RpsField
+
+                        data myArrayFields = new RpsFieldCollection(groupField, Config.ExpandArrays)
+                        foreach myArrayField in myArrayFields
+                        begin
+                            myArrayField.StartPosition += fieldOffset
+                            myFields.Add(myArrayField)
+                        end
+                    end
+
+                    if (MemHandle2)
+                        MemHandle2 = %mem_proc(DM_FREE,MemHandle2)
+
+                    ;;Reset field context
+                    xcall dd_field(RpsControl,DDF_ENDGROUP)
+                    if (RpsControl.error)
+                        throw new RpsGroupException("Failed to reset field context from group "+explicitGroupField)
+                end
+
+                fieldOffset += fieldSize
+            end
+
+            mreturn
         endmethod
 
         ;;Remove overlay fields from the field collection
         public method RemoveOverlays, void
-        required inout  myFields    ,@RpsFieldCollection
-        endparams
+            required inout  myFields    ,@RpsFieldCollection
+            endparams
         proc
             data index, int, 0
             repeat
@@ -1472,8 +1559,8 @@ processGroup,
 
         ;;Remove fields marked as "Excluded by Language" from the collection
         public method RemoveExcludedByLanguage, void
-        required inout  myFields    ,@RpsFieldCollection
-        endparams
+            required inout  myFields    ,@RpsFieldCollection
+            endparams
         proc
             data index, int, 0
             repeat
@@ -1492,8 +1579,8 @@ processGroup,
 
         ;;Remove fields marked as "Excluded by Toolkit" from the collection
         public method RemoveExcludedByToolkit, void
-        required inout  myFields    ,@RpsFieldCollection
-        endparams
+            required inout  myFields    ,@RpsFieldCollection
+            endparams
         proc
             data index, int, 0
             repeat
@@ -1512,8 +1599,8 @@ processGroup,
 
         ;;Remove fields marked as "Excluded by ReportWriter" from the collection
         public method RemoveExcludedByReportWriter, void
-        required inout  myFields    ,@RpsFieldCollection
-        endparams
+            required inout  myFields    ,@RpsFieldCollection
+            endparams
         proc
             data index, int, 0
             repeat
@@ -1532,8 +1619,8 @@ processGroup,
 
         ;;Remove fields marked as "Excluded by Web" from the collection
         public method RemoveExcludedByWeb, void
-        required inout  myFields    ,@RpsFieldCollection
-        endparams
+            required inout  myFields    ,@RpsFieldCollection
+            endparams
         proc
             data index, int, 0
             repeat
@@ -1595,6 +1682,8 @@ processGroup,
                 myField.Name = myField.AlternateName
             else
                 myField.Name = actualFieldName
+
+            myField.ExpandedName = myField.Name
 
             ;;Load extended data
 
@@ -2365,12 +2454,11 @@ processGroup,
             endparams
             record
                 ix          ,int
-                myConfig    ,RpsConfig
                 str         ,@RpsStructure
                 myEnums     ,@RpsEnumCollection
             endrecord
         proc
-            str = LoadStructure(myStructure.Name,myConfig)
+            str = LoadStructure(myStructure.Name,Config)
             for ix from 0 thru str.Fields.Count-1
             begin
                 if (str.Fields[ix].EnumName)
@@ -2500,7 +2588,7 @@ processGroup,
                                 data tmpd, d18
                                 tmpd = Members[Members.Count-1].ImplicitValue
                                 ImplicitValue = tmpd + 1 [LEFT]
-                               ;ImplicitValue = %integer(((RpsEnumMember)mCollection[mCollection.Count]).ImplicitValue) + 1 [LEFT]
+                                ;ImplicitValue = %integer(((RpsEnumMember)mCollection[mCollection.Count]).ImplicitValue) + 1 [LEFT]
                             end
                         end
                         Members.Add(new RpsEnumMember(EnumName,MemberName,ExplicitValue,ImplicitValue))

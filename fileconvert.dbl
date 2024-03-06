@@ -433,7 +433,7 @@ done,
                 while (fld_ctr < srcStruct.Fields.Count)
                 begin
                     srcField = srcStruct.Fields[fld_ctr-1]
-                    if (srcField.Name == destField.Name)
+                    if (srcField.ExpandedName == destField.ExpandedName)
                         exitloop
                     fld_ctr += 1
                     srcField = ^null
@@ -751,10 +751,11 @@ done,
 
             data frps = new Repository(fromData.rpsm, fromData.rpst)
 
-            ;frps.Config.WantKeys = true
             ;frps.Config.WantTags = true
             frps.Config.ExpandArrays = true
             frps.Config.ExpandGroups = true
+            frps.Config.ExpandGroupsKeepGroup = true
+            frps.Config.LogLevel = 1
 
             data fRpsFile = frps.LoadFile(fromData.file)
 
@@ -787,8 +788,16 @@ done,
                 while (fld_ctr <= srcStruct.Fields.Count)
                 begin
                     srcField = srcStruct.Fields[fld_ctr-1]
-                    if (srcField.Name == destField.Name)
-                        exitloop
+                    if (srcField.ExpandedName == destField.ExpandedName)
+                    begin
+                        if (srcField.GroupName && destField.GroupName)
+                        begin
+                            if (srcField.GroupName == destField.GroupName)
+                                exitloop
+                        end
+                        if (String.IsNullOrWhiteSpace(srcField.GroupName) && String.IsNullOrWhiteSpace(destField.GroupName))
+                            exitloop
+                    end
                     fld_ctr += 1
                     srcField = ^null
                 end
@@ -848,23 +857,23 @@ done,
                 clear pline
                 if (srcField != ^null)
                 begin
-                    sfld     = srcField.Name
+                    sfld = srcField.ExpandedName
                     if (frps.Config.ExpandArrays) then
                         sfldspec = srcField.DataTypeCode + %string(srcField.Size) 
                     else
                         sfldspec = RpsUtils.FormatArgs(srcField.ArrayDimension[1],srcField.ArrayDimension[2],srcField.ArrayDimension[3],srcField.ArrayDimension[4],1)
                         &    + srcField.DataTypeCode + %string(srcField.Size) 
-                    sfldpos  = %string(srcField.StartPosition,'ZZZZX')+','+%string(srcEndPos,'ZZZZX')
+                    sfldpos = %string(srcField.StartPosition,'ZZZZX')+','+%string(srcEndPos,'ZZZZX')
                 end
                 if (destField != ^null)
                 begin
-                    dfld     = destField.Name
+                    dfld = destField.ExpandedName
                     if (frps.Config.ExpandArrays) then
                         dfldspec = destField.DataTypeCode + %string(destField.Size) 
                     else
                         dfldspec = RpsUtils.FormatArgs(destField.ArrayDimension[1],destField.ArrayDimension[2],destField.ArrayDimension[3],destField.ArrayDimension[4],1)
                         &    + destField.DataTypeCode + %string(destField.Size) 
-                    dfldpos  = %string(destField.StartPosition,'ZZZZX')+','+%string(destEndPos,'ZZZZX')
+                    dfldpos = %string(destField.StartPosition,'ZZZZX')+','+%string(destEndPos,'ZZZZX')
                 end
                 writes(chan,%atrim(pline))
             end
@@ -923,13 +932,13 @@ done,
                 end
 
                 clear pline
-                Sfld     = srcField.Name
+                Sfld = srcField.Name
                 if (frps.Config.ExpandArrays) then
                     sfldspec = srcField.DataTypeCode + %string(srcField.Size) 
                 else
                     sfldspec = RpsUtils.FormatArgs(srcField.ArrayDimension[1],srcField.ArrayDimension[2],srcField.ArrayDimension[3],srcField.ArrayDimension[4],1)
                     &    + srcField.DataTypeCode + %string(srcField.Size) 
-                Sfldpos  = %string(srcField.StartPosition,'ZZZZX')+','+%string(srcEndPos,'ZZZZX')
+                Sfldpos = %string(srcField.StartPosition,'ZZZZX')+','+%string(srcEndPos,'ZZZZX')
                 writes(chan,%atrim(pline))
             end
 

@@ -126,6 +126,8 @@ namespace SynPSG.RepositoryAPI
             this.EnumName                = SourceField.EnumName
             this.GroupStructure          = SourceField.GroupStructure
             this.GroupMemberPrefix       = SourceField.GroupMemberPrefix
+            this.GroupName               = SourceField.GroupName
+            this.ExpandedName            = SourceField.ExpandedName
 
             ;;Clone the array dimensions
             this.ArrayDimension = new int[4]
@@ -1590,6 +1592,55 @@ namespace SynPSG.RepositoryAPI
                 mreturn (string)mf_info
             endmethod
         endproperty
+
+
+        ;;; <summary>
+        ;;; Expanded group name
+        ;;; </summary>
+        private mGroupName   ,string
+
+        public property GroupName ,string
+            method set
+            proc
+                mGroupName = value
+            endmethod
+            method get
+            proc
+                mreturn mGroupName
+            endmethod
+        endproperty
+
+        ;;; <summary>
+        ;;; Expanded group name
+        ;;; </summary>
+        private mExpandedName   ,string
+
+        public property ExpandedName ,string
+            method set
+            proc
+                mExpandedName = value
+            endmethod
+            method get
+            proc
+                mreturn mExpandedName
+            endmethod
+        endproperty
+
+        public static method LogRpsField ,void
+            required in     myStructure ,@RpsStructure
+            required in     myField     ,@RpsField
+            endparams
+            record
+                chan        ,i4
+
+        proc
+            open(chan,A,'DAT:rpsfield.log')
+
+            writes(chan,%datetime+' '+myStructure.Name+' '+myField.Name+' '+%string(myField.StartPosition))
+
+            close chan
+            mreturn
+        endmethod
 
     endclass
 

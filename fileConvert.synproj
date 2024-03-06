@@ -43,6 +43,7 @@
     <BootstrapperEnabled>True</BootstrapperEnabled>
     <RunPreBuildEvent>Always</RunPreBuildEvent>
     <RunPostBuildEvent>On successful build</RunPostBuildEvent>
+    <ProjEnvVars />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <Prefer32Bit Condition=" '$(TargetFrameworkVersion)'  != 'v4.0' AND '$(Prefer32Bit)' != 'false' ">true</Prefer32Bit>

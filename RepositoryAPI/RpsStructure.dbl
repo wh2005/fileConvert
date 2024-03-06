@@ -89,13 +89,19 @@ namespace SynPSG.RepositoryAPI
             ;mFormats = new RpsFormatCollection()
             ;mRelations = new RpsRelationCollection()
             ;mEnums = new RpsEnumCollection()
-
             FileType = "USER DEFINED"
             Length = 0
             ChildCount = 0
             TagType = RpsTagType.None
             FirstFile = String.Empty
-            
+        endmethod
+
+        public method RpsStructure
+            req in  aName       ,string
+            endparams
+            this()
+        proc
+            mStructureName = aName
         endmethod
 
         ;; Destructor

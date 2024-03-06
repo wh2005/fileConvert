@@ -258,20 +258,22 @@ namespace SynPSG.RepositoryAPI
     endstructure
 
     structure RpsConfig
-        AlternateNames      ,Boolean
-        ExpandArrays        ,Boolean
-        ExpandGroups        ,Boolean
-        WantKeys            ,Boolean
-        WantFormats         ,Boolean
-        WantRelations       ,Boolean
-        WantTags            ,Boolean
-        WantStructureEnums  ,Boolean
-        WantStructureFiles  ,Boolean
-        NoOverlays          ,Boolean
-        NoExclDBL           ,Boolean
-        NoExclDTK           ,Boolean
-        NoExclRPT           ,Boolean
-        NoExclWEB           ,Boolean
+        AlternateNames          ,Boolean
+        ExpandArrays            ,Boolean
+        ExpandGroups            ,Boolean
+        ExpandGroupsKeepGroup   ,Boolean
+        WantKeys                ,Boolean
+        WantFormats             ,Boolean
+        WantRelations           ,Boolean
+        WantTags                ,Boolean
+        WantStructureEnums      ,Boolean
+        WantStructureFiles      ,Boolean
+        NoOverlays              ,Boolean
+        NoExclDBL               ,Boolean
+        NoExclDTK               ,Boolean
+        NoExclRPT               ,Boolean
+        NoExclWEB               ,Boolean
+        LogLevel                ,int
     endstructure
 
 .define DDINFO_STRUCTURE
