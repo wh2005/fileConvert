@@ -1,5 +1,6 @@
 import System
 import System.Collections.Generic
+import System.Diagnostics
 import System.Linq
 
 import SynPSG
@@ -19,7 +20,7 @@ import SynPSG.RepositoryAPI
 
 main
 
-.define D_APP_VERSION "fileConvert v0.1"
+.define D_APP_VERSION "fileConvert v1.0"
 
 .define MAX_ARGS    20
 
@@ -39,14 +40,19 @@ main
         strng       ,String
         mode        ,i4
         interval    ,i4
+        deleteOutput,i4
+        argError    ,i4
+        exitStatus  ,i4
     endrecord
 
 proc
 
+    exitStatus = D_EXIT_SUCCESS
+
     try
     begin
         init src, dest
-        clear mode, interval
+        clear mode, interval, deleteOutput
         
         xcall cmdln(cmdlin, num_args, argPos, argLen)
 
@@ -65,10 +71,12 @@ proc
             Console.WriteLine("                              mode 0 = convert file")
             Console.WriteLine("                              mode 1 = create mapping report (default)")
             Console.WriteLine("[-int <interval>]           Update UI interval")
+            Console.WriteLine("[-d]                        Delete output file (if it exists)")
             Console.WriteLine("")
-            stop D_EXIT_SUCCESS
+            stop exitStatus
         end
 
+        argError = 1
         argCtr = 0
 
         while(argCtr < num_args)
@@ -161,6 +169,12 @@ proc
 
                 interval = cmdlin(argPos[argCtr]:argLen[argCtr])
             end
+
+            ('-d '),
+            begin
+                deleteOutput = 1
+            end
+
             endusing
         end
 
@@ -198,9 +212,15 @@ proc
 
         using mode select
         (0),
-            SynUtils.ConvertFile(src,dest,interval)
+        begin
+            argError = 0
+            SynUtils.ConvertFile(src,dest,interval,deleteOutput)
+        end
         (1),
+        begin
+            argError = 0
             SynUtils.PrintDefinition(src,dest)
+        end
         (),
             throw new ApplicationException("Invalid option -m "+%string(mode))
         endusing
@@ -209,12 +229,30 @@ proc
     begin
         Console.WriteLine(D_APP_VERSION)
         Console.WriteLine("")
+        if (argError)
+        begin
+            Console.WriteLine(%atrim(cmdlin))
+            Console.WriteLine("")
+        end
         Console.WriteLine(ex.Message)
-        stop D_EXIT_FAILURE
+        exitStatus = D_EXIT_FAILURE
     end
     endtry
 
-    stop D_EXIT_SUCCESS
+    Console.WriteLine("")
+
+    if (Debugger.IsAttached)
+    begin
+        data myChar ,a1
+        data chan ,i4 ,0
+        open(chan,O,'TT:')
+        display (chan,"Press any key to continue ")
+        accept (chan,myChar,WAIT:10) [ERR=continue]
+continue,
+        close chan
+    end
+
+    stop exitStatus
 
 endmain
 
@@ -239,6 +277,7 @@ namespace SynPSG
             req in      fromData    ,ConvertData
             req in      toData      ,ConvertData
             opt in      interval    ,n
+            opt in      aDelete     ,n              ;if output file exists, delete it
             endparams
 
             record
@@ -279,6 +318,31 @@ namespace SynPSG
 
             tRpsFile = trps.LoadFile(toData.file)
 
+            using tRpsFile.FileType select
+            ('DBL ISAM'),
+            begin
+                open(tChan=0,I:I,tRpsFile.FileSpec,OPTIONS:"/ex") [$ERR_FINUSE=fileInUse,ERR=continue]
+                close tChan
+
+                if (^passed(aDelete) && aDelete) then
+                    xcall delet(tRpsFile.FileSpec)
+                else
+                begin
+                    throw new ApplicationException("Output file already exists")
+
+fileInUse,
+                    throw new ApplicationException("Output file is in use")
+                end
+
+continue,
+                open(tChan, O, tRpsFile.FileSpec+'.tmp') [ERR=openError2]
+            end
+            (),
+            begin
+                open(tChan, O, tRpsFile.FileSpec) [ERR=openError2]
+            end
+            endusing
+
             using fRpsFile.FileType select
             ('DBL ISAM'),
             begin
@@ -289,17 +353,6 @@ namespace SynPSG
             begin
                 open(fChan, I, fRpsFile.FileSpec, OPTIONS:"/ex/sequential") [ERR=openError]
                 numrecs = 0
-            end
-            endusing
-
-            using tRpsFile.FileType select
-            ('DBL ISAM'),
-            begin
-                open(tChan, O, tRpsFile.FileSpec+'.tmp') [ERR=openError2]
-            end
-            (),
-            begin
-                open(tChan, O, tRpsFile.FileSpec) [ERR=openError2]
             end
             endusing
 
@@ -343,41 +396,49 @@ done,
             close tChan
             close fChan
 
-            Console.Writeline("output generated")
+            Console.Writeline("Output generated")
 
             using tRpsFile.FileType select
             ('DBL ISAM'),
             begin
-                data filespec   ,a1024
-                data reclen     ,i4
-                data num_keys   ,i4
-                data key_spec   ,[8]a256
-                data log_file   ,a80
                 data mydcs      ,dcs
-
-                Console.Writeline("Getting key definitions")
-
                 mydcs = tRps.Info
-                data status ,i4 ,%ismkey(mydcs,, toData.file, filespec, reclen, num_keys, key_spec, log_file)
-                using status select
-                (0), ;ERR_NONE
+
+                Console.Writeline("Creating XDL file")
+
+                data xdlfile ,a80 ,toData.file+'.xdl'
+                data status ,i4 ,%rpsxdl(mydcs, toData.file, xdlfile)
+
+                Console.Writeline("Loading isam file")
+
+                data cmd ,String ,'fconvert -ir '+tRpsFile.FileSpec+'.tmp'+' -oi '+tRpsFile.FileSpec+' -d '+%atrim(xdlfile)
+                data bufr ,a1024
+                data chan ,i4 ,0
+
+                open(chan,I,'|'+cmd) [ERR=openPipeError]
+                reads(chan,bufr) [ERR=readPipeError]
+                if (%instr(1,bufr,'Error:'))
                 begin
-                    Console.Writeline("creating updated isam file")
-
-                    ;create a new isam file
-                    xcall isamc(tRpsFile.FileSpec, reclen, num_keys, key_spec)
-
-                    Console.Writeline("loading isam file")
-                    xcall shell(,'fconvert -ii '+tRpsFile.FileSpec+'.tmp'+' -oi '+tRpsFile.FileSpec)
-
-                    xcall delet(tRpsFile.FileSpec+'.tmp')
-                    clear status
+                    Console.Writeline(%atrim(bufr))
                 end
-                (),
+                close chan
+
+                if (false)
                 begin
-                    throw new ApplicationException("ISMKEY Error " +%string(status))
+openPipeError,
+                    Console.Writeline('Error '+%string(%error)+" running command")
+                    exit
+readPipeError,
+                    close chan
+                    Console.Writeline('Error '+%string(%error)+" reading command reponse")
                 end
-                endusing
+
+                Console.Writeline("Removing temp files")
+                
+                xcall delet(xdlfile)
+                xcall delet(tRpsFile.FileSpec+'.tmp')
+
+                clear status
             end
             endusing
 
@@ -755,7 +816,7 @@ done,
             frps.Config.ExpandArrays = true
             frps.Config.ExpandGroups = true
             frps.Config.ExpandGroupsKeepGroup = true
-            frps.Config.LogLevel = 1
+            ;frps.Config.LogLevel = 1
 
             data fRpsFile = frps.LoadFile(fromData.file)
 
@@ -790,7 +851,7 @@ done,
                     srcField = srcStruct.Fields[fld_ctr-1]
                     if (srcField.ExpandedName == destField.ExpandedName)
                     begin
-                        if (srcField.GroupName && destField.GroupName)
+                        if (!String.IsNullOrWhiteSpace(srcField.GroupName) && !String.IsNullOrWhiteSpace(destField.GroupName))
                         begin
                             if (srcField.GroupName == destField.GroupName)
                                 exitloop

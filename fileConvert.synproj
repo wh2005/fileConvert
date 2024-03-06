@@ -48,22 +48,26 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <Prefer32Bit Condition=" '$(TargetFrameworkVersion)'  != 'v4.0' AND '$(Prefer32Bit)' != 'false' ">true</Prefer32Bit>
     <IncludeDebugInformation>true</IncludeDebugInformation>
-    <OutputPath>bin\Debug\</OutputPath>
-    <UnevaluatedOutputPath>bin\Debug\</UnevaluatedOutputPath>
+    <OutputPath>$(SolutionDir)exe</OutputPath>
+    <UnevaluatedOutputPath>$(SolutionDir)exe</UnevaluatedOutputPath>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
     <DebugOptimize>Debug</DebugOptimize>
-    <DocumentationFile>bin\Debug\fileConvert.xml</DocumentationFile>
+    <DocumentationFile>
+    </DocumentationFile>
+    <TargetRuntimeLevel>12030100</TargetRuntimeLevel>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <Prefer32Bit Condition=" '$(TargetFrameworkVersion)'  != 'v4.0' AND '$(Prefer32Bit)' != 'false' ">true</Prefer32Bit>
     <IncludeDebugInformation>true</IncludeDebugInformation>
-    <OutputPath>bin\Release\</OutputPath>
-    <UnevaluatedOutputPath>bin\Release\</UnevaluatedOutputPath>
+    <OutputPath>$(SolutionDir)exe</OutputPath>
+    <UnevaluatedOutputPath>$(SolutionDir)exe</UnevaluatedOutputPath>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
     <DebugOptimize>Optimize</DebugOptimize>
-    <DocumentationFile>bin\Release\fileConvert.xml</DocumentationFile>
+    <DocumentationFile>
+    </DocumentationFile>
+    <TargetRuntimeLevel>12030100</TargetRuntimeLevel>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
@@ -78,9 +82,9 @@
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ismkey.dbl" />
     <Compile Include="Properties\AssemblyInfo.dbl" />
     <Compile Include="fileconvert.dbl" />
+    <Compile Include="rpsxdl.dbl" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Properties" />
