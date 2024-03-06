@@ -5,19 +5,10 @@
 ;                 : E:\DEV\fileConvert\rps\rpstext.ism
 ;                 : Version 12.3.1
 ;
-;  GENERATED      : 04-MAR-2024, 10:53:09
+;  GENERATED      : 06-MAR-2024, 08:22:55
 ;                 : Version 12.3.1
 ;  EXPORT OPTIONS : [ALL] 
  
- 
-Structure DDDDB   DBL ISAM
-   Description "dddd implicit group"
- 
-Field IG1FLD1   Type ALPHA   Size 1
- 
-Field IG1FLD2   Type ALPHA   Size 2
- 
-Field IG1FLD3   Type ALPHA   Size 3
  
 Structure CCCCB   DBL ISAM
    Description "Explicit Group 2"
@@ -56,6 +47,25 @@ Field IG1FLD1   Type ALPHA   Size 1
 Field IG1FLD2   Type ALPHA   Size 2
  
 Field IG1FLD3   Type ALPHA   Size 3
+ 
+Structure DDDDB   DBL ISAM
+   Description "dddd implicit group"
+ 
+Field IG1FLD1   Type ALPHA   Size 1
+ 
+Field IG1FLD2   Type ALPHA   Size 2
+ 
+Field IG1FLD3   Type ALPHA   Size 3
+ 
+Group IGFLD4IG   Type ALPHA   Dimension 2
+ 
+   Field IIG1   Type ALPHA   Size 1
+ 
+   Field IIG2   Type ALPHA   Size 1
+ 
+Endgroup
+ 
+Group IGFLD5EG   Reference BBBBB   Type ALPHA
  
 Structure AAAAB   DBL ISAM
    Description "Explicit Group"
