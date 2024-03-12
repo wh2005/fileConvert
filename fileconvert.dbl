@@ -426,9 +426,37 @@ done,
                 data xdlfile ,a80 ,toData.file+'.xdl'
                 data status ,i4 ,%rpsxdl(mydcs, toData.file, xdlfile)
 
+                data cmd ,String ,'fconvert -ir '+tRpsFile.FileSpec+'.tmp'+' -oi '+tRpsFile.FileSpec+' -d '+%atrim(xdlfile)
+
+                data srcfile ,String ,fRpsFile.FileSpec
+                data dstFile ,String ,""
+
+                ;if both isam files and same filename, rename the source file
+                if (fRpsFile.FileType == tRpsFile.FileType && fRpsFile.FileSpec == tRpsFile.FileSpec)
+                begin
+                    data fNode ,a256
+                    data fDev ,a256
+                    data fDir ,a256
+                    data fName ,a256
+                    data fType ,a40
+                    xcall parse(fRpsFile.FileSpec,1,fNode,fDev,fDir,fName,fType)
+
+                    data myDatetime ,a14 ,%datetime
+                    srcfile = %atrim(fNode)+%atrim(fDev)+%atrim(fDir)+%atrim(fName)+%atrim(fType)
+                    dstFile = %atrim(fNode)+%atrim(fDev)+%atrim(fDir)+%atrim(fName)+'_'+%atrim(myDatetime)
+                    try
+                    begin
+                        xcall renam(dstFile, srcfile)
+                    end
+                    catch (excp ,@Exception)
+                    begin
+                        throw new ApplicationException("Could not rename "+srcfile+". After removing file, you can manually run "+cmd)                        
+                    end
+                    endtry
+                end
+
                 Console.Writeline("Loading isam file")
 
-                data cmd ,String ,'fconvert -ir '+tRpsFile.FileSpec+'.tmp'+' -oi '+tRpsFile.FileSpec+' -d '+%atrim(xdlfile)
                 data bufr ,a1024
                 data chan ,i4 ,0
 
