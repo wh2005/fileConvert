@@ -38,6 +38,7 @@ main
         src         ,ConvertData
         dest        ,ConvertData
         strng       ,String
+        mappingFile ,String
         mode        ,i4
         interval    ,i4
         deleteOutput,i4
@@ -53,7 +54,8 @@ proc
     begin
         init src, dest
         clear mode, interval, deleteOutput
-        
+        mappingFile = ^null
+
         xcall cmdln(cmdlin, num_args, argPos, argLen)
 
         if (%instr(1, cmdlin, ' -h ') || %instr(1, cmdlin, ' -? '))
@@ -61,15 +63,16 @@ proc
             Console.WriteLine(D_APP_VERSION)
             Console.WriteLine("")
             Console.WriteLine("Usage:")
-            Console.WriteLine(" -i <inputRPSFile>          Source Repository file")
-            Console.WriteLine(" -o <outputRPSFile>         Output Repository file")
+            Console.WriteLine(" -i <inputRpsFile>          Source Repository file")
+            Console.WriteLine(" -o <outputRpsFile>         Output Repository file")
             Console.WriteLine("[-ir <rpsmfil> <rpstfil>]   Source definition Repository")
             Console.WriteLine("                              default to RPSMFIL: / RPSTFIL:")
             Console.WriteLine("[-or <rpsmfil> <rpstfil>]   Output definition Repository")
             Console.WriteLine("                              default to source definition repository")
             Console.WriteLine("[-m [<mode>] ]              Program mode")
             Console.WriteLine("                              mode 0 = convert file")
-            Console.WriteLine("                              mode 1 = create mapping report (default)")
+            Console.WriteLine("                              mode 1 = create mapping file (default)")
+            Console.WriteLine("[-ml [<mapFileName>] ]      mapping file name")
             Console.WriteLine("[-int <interval>]           Update UI interval")
             Console.WriteLine("[-d]                        Delete output file (if it exists)")
             Console.WriteLine("")
@@ -159,6 +162,17 @@ proc
                 mode = cmdlin(argPos[argCtr]:argLen[argCtr])
             end
 
+            ('-ml '),
+            begin
+                argCtr += 1
+                if (argCtr > MAX_ARGS || argPos[argCtr] < 1 || argLen[argCtr] < 1)
+                    exit
+                if (cmdlin(argPos[argCtr]:argLen[argCtr]) == '-')
+                    exit
+            
+                mappingFile = cmdlin(argPos[argCtr]:argLen[argCtr])
+            end
+                
             ('-int '),
             begin
                 argCtr += 1
@@ -210,6 +224,9 @@ proc
         if (src.rpsm == dest.rpsm && src.rpst == dest.rpst && src.file == dest.file)
             throw new ApplicationException("Must specify different Repositories and/or RPS files")
 
+        if (String.IsNullOrWhitespace(mappingFile))
+            mappingFile = 'log:'+src.file+'.log'
+            
         using mode select
         (0),
         begin
@@ -219,7 +236,7 @@ proc
         (1),
         begin
             argError = 0
-            SynUtils.PrintDefinition(src,dest)
+            SynUtils.PrintDefinition(src,dest,mappingFile)
         end
         (),
             throw new ApplicationException("Invalid option -m "+%string(mode))
@@ -774,6 +791,7 @@ readPipeError,
         public static method PrintDefinition ,void
             req in      fromData    ,ConvertData
             req in      toData      ,ConvertData
+            req in      mappingFile ,String
             endparams
 
             record pline
@@ -810,6 +828,8 @@ readPipeError,
 
         proc
 
+            open(chan=0,O,mappingFile) [ERR=badMapFileName]
+
             data frps = new Repository(fromData.rpsm, fromData.rpst)
 
             ;frps.Config.WantTags = true
@@ -825,9 +845,6 @@ readPipeError,
             trps.Config = frps.Config
 
             data tRpsFile = trps.LoadFile(toData.file)
-
-
-            open(chan=0,O,'log:'+fRpsFile.Name+'.log')
 
             clear phed
             phed.src = fRpsFile.Name+'  '+fRpsFile.Description
@@ -1017,7 +1034,17 @@ readPipeError,
                 trps = ^null
             end
 
+            Console.Writeline("Created map file ["+mappingFile+"]")
+
             mreturn
+
+
+        badMapFileName,
+            if (String.IsNullOrEmpty(mappingFile))
+                throw new ApplicationException("Invalid filename [null]")
+
+            throw new ApplicationException("Invalid filename ["+mappingFile.Trim()+"]")
+
         endmethod
 
     endclass
