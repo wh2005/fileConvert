@@ -1,0 +1,1 @@
+The fileConvert utility is written in the programming language Synergy/DE and is intended to be used to convert a Synergy DBMS Isam file from one format to another.  The source and destination formats must be defined in a Synergy/DE Repository.
